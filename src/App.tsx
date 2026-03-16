@@ -14,6 +14,7 @@ import mainPhoto from '../img/main/wedding_1.jpg'
 import secondPhoto from '../img/main/main_2.jpg'
 import endingPhoto from '../img/main/ending.png'
 import mapImage from '../img/main/map.png'
+import bgMusic from '../music/참_아름다워라.mp3'
 
 import p01 from '../img/IMG_0386.jpg'
 import p02 from '../img/IMG_0842.JPG'
@@ -72,6 +73,14 @@ function formatDate(ts: Timestamp) {
 function App() {
   const [cd, setCd] = useState({ d: 0, h: 0, m: 0, s: 0 })
   const [lightbox, setLightbox] = useState<number | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast(msg)
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
+  }, [])
   const [groomOpen, setGroomOpen] = useState(false)
   const [brideOpen, setBrideOpen] = useState(false)
 
@@ -86,6 +95,56 @@ function App() {
   const [gbSubmitting, setGbSubmitting] = useState(false)
   const gbVisibleCount = 3
   const gbContentRef = useRef<HTMLTextAreaElement>(null)
+
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [musicPlaying, setMusicPlaying] = useState(true)
+
+  const [rsvpOpen, setRsvpOpen] = useState(false)
+  const [rsvpStep, setRsvpStep] = useState(1)
+  const [rsvpSubmitting, setRsvpSubmitting] = useState(false)
+  const [rsvpData, setRsvpData] = useState({
+    attendance: '참석',
+    side: '신랑측',
+    name: '',
+    phone: '',
+    extraGuests: 0,
+    companionNames: '',
+    meal: '예정',
+    message: '',
+  })
+
+  useEffect(() => {
+    const tryPlay = () => {
+      const audio = audioRef.current
+      if (!audio) return
+      audio.play().then(() => {
+        setMusicPlaying(true)
+        document.removeEventListener('click', tryPlay)
+        document.removeEventListener('touchstart', tryPlay)
+        document.removeEventListener('scroll', tryPlay)
+      }).catch(() => {})
+    }
+    document.addEventListener('click', tryPlay, { once: false })
+    document.addEventListener('touchstart', tryPlay, { once: false })
+    document.addEventListener('scroll', tryPlay, { once: false })
+    tryPlay()
+    return () => {
+      document.removeEventListener('click', tryPlay)
+      document.removeEventListener('touchstart', tryPlay)
+      document.removeEventListener('scroll', tryPlay)
+    }
+  }, [])
+
+  const toggleMusic = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (musicPlaying) {
+      audio.pause()
+      setMusicPlaying(false)
+    } else {
+      audio.play().then(() => setMusicPlaying(true)).catch(() => {})
+    }
+  }, [musicPlaying])
 
   useEffect(() => {
     const target = new Date('2026-10-24T14:30:00+09:00').getTime()
@@ -138,16 +197,16 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (gbShowWrite || gbShowDelete || gbShowMore) {
+    if (gbShowWrite || gbShowDelete || gbShowMore || rsvpOpen) {
       document.body.style.overflow = 'hidden'
     } else if (lightbox === null) {
       document.body.style.overflow = ''
     }
-  }, [gbShowWrite, gbShowDelete, gbShowMore, lightbox])
+  }, [gbShowWrite, gbShowDelete, gbShowMore, rsvpOpen, lightbox])
 
   const handleGbSubmit = useCallback(async () => {
     if (!gbName.trim() || !gbPw.trim() || !gbContent.trim()) {
-      alert('모든 항목을 입력해 주세요.')
+      showToast('모든 항목을 입력해 주세요.')
       return
     }
     setGbSubmitting(true)
@@ -163,7 +222,7 @@ function App() {
       setGbContent('')
       setGbShowWrite(false)
     } catch {
-      alert('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+      showToast('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.')
     }
     setGbSubmitting(false)
   }, [gbName, gbPw, gbContent])
@@ -173,7 +232,7 @@ function App() {
     const entry = gbEntries.find((e) => e.id === gbShowDelete)
     if (!entry) return
     if (gbDelPw !== entry.password) {
-      alert('비밀번호가 일치하지 않습니다.')
+      showToast('비밀번호가 일치하지 않습니다.')
       return
     }
     setGbSubmitting(true)
@@ -182,10 +241,52 @@ function App() {
       setGbDelPw('')
       setGbShowDelete(null)
     } catch {
-      alert('삭제에 실패했습니다.')
+      showToast('삭제에 실패했습니다.')
     }
     setGbSubmitting(false)
   }, [gbShowDelete, gbDelPw, gbEntries])
+
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzu-ccO4ds4ZWwuuIivtUpb6Xvw7XJtWoa-9TJ1PJodnaM5Z97X2XmwrxKAN__F0Fbt/exec'
+
+  const openRsvp = useCallback(() => {
+    setRsvpData({
+      attendance: '참석', side: '신랑측', name: '', phone: '',
+      extraGuests: 0, companionNames: '', meal: '예정', message: '',
+    })
+    setRsvpStep(1)
+    setRsvpOpen(true)
+  }, [])
+
+  const handleRsvpSubmit = useCallback(async () => {
+    if (!rsvpData.name.trim()) {
+      showToast('성함을 입력해 주세요.')
+      return
+    }
+    setRsvpSubmitting(true)
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attendance: rsvpData.attendance,
+          side: rsvpData.side,
+          name: rsvpData.name.trim(),
+          phone: rsvpData.phone.trim(),
+          extraGuests: rsvpData.extraGuests,
+          companionNames: rsvpData.companionNames.trim(),
+          meal: rsvpData.meal,
+          message: rsvpData.message.trim(),
+          timestamp: new Date().toISOString(),
+        }),
+      })
+      showToast('참석 여부가 전달되었습니다. 감사합니다!')
+      setRsvpOpen(false)
+    } catch {
+      showToast('전송에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    }
+    setRsvpSubmitting(false)
+  }, [rsvpData, APPS_SCRIPT_URL])
 
   const closeLightbox = useCallback(() => setLightbox(null), [])
   const prevSlide = useCallback(() => {
@@ -197,7 +298,31 @@ function App() {
 
   return (
     <div className="app-root">
+      <audio ref={audioRef} src={bgMusic} loop preload="auto" />
       <main className="invitation">
+
+        <button
+          type="button"
+          className={`music-btn ${musicPlaying ? 'music-playing' : ''}`}
+          onClick={toggleMusic}
+          aria-label={musicPlaying ? '음악 끄기' : '음악 켜기'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {musicPlaying ? (
+              <>
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              </>
+            ) : (
+              <>
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </>
+            )}
+          </svg>
+        </button>
 
         {/* ── Hero / Save the Date ── */}
         <section className="hero">
@@ -429,7 +554,7 @@ function App() {
                       <button
                         type="button"
                         className="copy-btn"
-                        onClick={() => { navigator.clipboard.writeText('0000-00-0000000'); alert('계좌번호가 복사되었습니다.') }}
+                        onClick={() => { navigator.clipboard.writeText('0000-00-0000000'); showToast('계좌번호가 복사되었습니다.') }}
                       >
                         복사
                       </button>
@@ -464,7 +589,7 @@ function App() {
                       <button
                         type="button"
                         className="copy-btn"
-                        onClick={() => { navigator.clipboard.writeText('0000-00-0000000'); alert('계좌번호가 복사되었습니다.') }}
+                        onClick={() => { navigator.clipboard.writeText('0000-00-0000000'); showToast('계좌번호가 복사되었습니다.') }}
                       >
                         복사
                       </button>
@@ -495,7 +620,7 @@ function App() {
             참석 여부 전달을 꼭 부탁드립니다.
           </div>
           <div className="fade-up">
-            <button type="button" className="rsvp-btn">전달하기</button>
+            <button type="button" className="rsvp-btn" onClick={openRsvp}>전달하기</button>
           </div>
         </section>
 
@@ -691,6 +816,96 @@ function App() {
         </div>
       )}
 
+      {/* ── RSVP Modal ── */}
+      {rsvpOpen && (
+        <div className="gb-overlay" onClick={() => setRsvpOpen(false)}>
+          <div className="gb-modal rsvp-modal" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="gb-modal-close" onClick={() => setRsvpOpen(false)}>&times;</button>
+            <div className="gb-modal-body rsvp-body-modal">
+
+              {rsvpStep === 1 && (
+                <>
+                  <div className="rsvp-field">
+                    <h4 className="rsvp-field-label">참석 여부를 선택해 주세요.<span className="rsvp-req">필수</span></h4>
+                    <div className="rsvp-toggle">
+                      <button type="button" className={`rsvp-opt ${rsvpData.attendance === '참석' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, attendance: '참석' }))}>참석</button>
+                      <button type="button" className={`rsvp-opt ${rsvpData.attendance === '불참석' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, attendance: '불참석' }))}>불참석</button>
+                    </div>
+                  </div>
+
+                  <div className="rsvp-field">
+                    <h4 className="rsvp-field-label">참석 정보를 선택해 주세요.<span className="rsvp-req">필수</span></h4>
+                    <div className="rsvp-toggle">
+                      <button type="button" className={`rsvp-opt ${rsvpData.side === '신랑측' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, side: '신랑측' }))}>신랑측</button>
+                      <button type="button" className={`rsvp-opt ${rsvpData.side === '신부측' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, side: '신부측' }))}>신부측</button>
+                    </div>
+                  </div>
+
+                  <ul className="gb-form">
+                    <li>
+                      <p className="gb-form-label">성함<span className="rsvp-req">필수</span></p>
+                      <input type="text" className="gb-input" placeholder="본인 성함 입력" value={rsvpData.name} onChange={(e) => setRsvpData((d) => ({ ...d, name: e.target.value }))} />
+                    </li>
+                    <li>
+                      <p className="gb-form-label">연락처</p>
+                      <input type="text" className="gb-input" placeholder="핸드폰 번호 입력" value={rsvpData.phone} onChange={(e) => setRsvpData((d) => ({ ...d, phone: e.target.value.replace(/[^0-9-]/g, '') }))} />
+                    </li>
+                    <li>
+                      <p className="gb-form-label">추가 인원</p>
+                      <select className="gb-input rsvp-select" value={rsvpData.extraGuests} onChange={(e) => setRsvpData((d) => ({ ...d, extraGuests: Number(e.target.value) }))}>
+                        {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
+                          <option key={n} value={n}>본인 외 {n}명</option>
+                        ))}
+                      </select>
+                    </li>
+                    {rsvpData.extraGuests > 0 && (
+                      <li>
+                        <p className="gb-form-label">동행인 성함</p>
+                        <input type="text" className="gb-input" placeholder="쉼표(,)로 구분하여 입력" value={rsvpData.companionNames} onChange={(e) => setRsvpData((d) => ({ ...d, companionNames: e.target.value }))} />
+                      </li>
+                    )}
+                  </ul>
+
+                  <button type="button" className="gb-submit-btn" onClick={() => {
+                    if (!rsvpData.name.trim()) { showToast('성함을 입력해 주세요.'); return }
+                    setRsvpStep(2)
+                  }}>
+                    다음
+                  </button>
+                </>
+              )}
+
+              {rsvpStep === 2 && (
+                <>
+                  <div className="rsvp-field">
+                    <h4 className="rsvp-field-label">식사 예정을 선택해 주세요.<span className="rsvp-req">필수</span></h4>
+                    <div className="rsvp-toggle">
+                      <button type="button" className={`rsvp-opt ${rsvpData.meal === '예정' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, meal: '예정' }))}>예정</button>
+                      <button type="button" className={`rsvp-opt ${rsvpData.meal === '답례품 수령' ? 'rsvp-opt-on' : ''}`} onClick={() => setRsvpData((d) => ({ ...d, meal: '답례품 수령' }))}>답례품 수령</button>
+                    </div>
+                  </div>
+
+                  <ul className="gb-form">
+                    <li>
+                      <p className="gb-form-label">전달사항</p>
+                      <input type="text" className="gb-input" maxLength={25} placeholder="최대 25자까지 입력 가능" value={rsvpData.message} onChange={(e) => setRsvpData((d) => ({ ...d, message: e.target.value }))} />
+                    </li>
+                  </ul>
+
+                  <div className="rsvp-nav-btns">
+                    <button type="button" className="rsvp-prev-btn" onClick={() => setRsvpStep(1)}>이전</button>
+                    <button type="button" className="gb-submit-btn" disabled={rsvpSubmitting} onClick={handleRsvpSubmit}>
+                      {rsvpSubmitting ? '전송 중...' : '제출하기'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Lightbox ── */}
       {lightbox !== null && (
         <div className="lightbox-overlay" onClick={closeLightbox}>
@@ -716,6 +931,13 @@ function App() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className="toast" onClick={() => setToast(null)}>
+          {toast}
         </div>
       )}
     </div>
