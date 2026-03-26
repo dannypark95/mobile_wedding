@@ -16,36 +16,13 @@ import endingPhoto from '../img/main/ending.png'
 import mapImage from '../img/main/map.png'
 import bgMusic from '../music/참_아름다워라.mp3'
 
-import p01 from '../img/IMG_0386.jpg'
-import p02 from '../img/IMG_0842.JPG'
-import p03 from '../img/IMG_0849.JPG'
-import p04 from '../img/IMG_1107.jpg'
-import p06 from '../img/IMG_1351.jpg'
-import p07 from '../img/IMG_1367.jpg'
-import p08 from '../img/IMG_1542.jpg'
-import p09 from '../img/IMG_1587.jpg'
-import p10 from '../img/IMG_1610.jpg'
-import p11 from '../img/IMG_1737.jpg'
-import p12 from '../img/IMG_1859.jpg'
-import p13 from '../img/IMG_1935.JPG'
-import p14 from '../img/IMG_1937.JPG'
-import p15 from '../img/IMG_1938.JPG'
-import p16 from '../img/IMG_1973.jpg'
-import p17 from '../img/IMG_2028.jpg'
-import p18 from '../img/IMG_2030.jpg'
-import p19 from '../img/IMG_2033.jpg'
-import p20 from '../img/IMG_2062.jpg'
-import p21 from '../img/IMG_2322.JPG'
-import p22 from '../img/IMG_8620.JPG'
-import p23 from '../img/4649CC90-5A72-4290-9AB0-30EF97767350.JPG'
+import p01 from '../img/IMG_1859.jpg'
+import p02 from '../img/IMG_1937.JPG'
+import p03 from '../img/IMG_1938.JPG'
 
 import './App.css'
 
-const albumPhotos = [
-  p01, p02, p03, p04, p06, p07, p08, p09, p10,
-  p11, p12, p13, p14, p15, p16, p17, p18, p19, p20,
-  p21, p22, p23,
-]
+const albumPhotos = [p01, p02, p03]
 
 interface GuestBookEntry {
   id: string
