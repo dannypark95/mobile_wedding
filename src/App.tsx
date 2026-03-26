@@ -303,22 +303,21 @@ function App() {
 
         {/* ── Hero / Save the Date ── */}
         <section className="hero">
-          <div className="hero-date-block fade-up">
-            <span className="hero-name-side">박 성 현</span>
-            <div className="hero-date-num">
-              <span className="month">10</span>
-              <span className="day">24</span>
-            </div>
-            <span className="hero-name-side">배 예 은</span>
+          <div className="hero-top fade-up">
+            <span className="hero-date-full">2026 / 10 / 24</span>
+            <span className="hero-day">SATURDAY</span>
           </div>
           <div className="hero-photo fade-up">
             <img src={mainPhoto} alt="성현과 예은" />
             <div className="hero-photo-gradient" />
           </div>
-          <div className="hero-caption fade-up">
-            2026년 10월 24일 토요일 오후 2시 30분
-            <br />
-            부산 센텀호텔 4F 벨라홀
+          <div className="hero-bottom fade-up">
+            <div className="hero-names">박성현 · 배예은</div>
+            <div className="hero-detail">
+              2026년 10월 24일 토요일 오후 2시 30분
+              <br />
+              부산 센텀호텔 4F 벨라홀
+            </div>
           </div>
         </section>
 
@@ -343,7 +342,14 @@ function App() {
             <img src={secondPhoto} alt="성현과 예은" />
           </div>
           <div className="invite-names fade-up">
-            박성현 · 배예은
+            <div className="honju-line">
+              <span className="honju-child">박 영 준</span><span className="honju-role">의 아들</span>
+              <span className="honju-child">박 성 현</span>
+            </div>
+            <div className="honju-line">
+              <span className="honju-child">김 미 경</span><span className="honju-role">의 딸</span>
+              <span className="honju-child">배 예 은</span>
+            </div>
           </div>
         </section>
 
@@ -393,23 +399,23 @@ function App() {
           {/* ── Countdown ── */}
           <div className="countdown-bar fade-up">
             <div className="cd-unit">
+              <span className="cd-label">DAYS</span>
               <span className="cd-num">{cd.d}</span>
-              <span className="cd-label">Days</span>
             </div>
             <span className="cd-colon">:</span>
             <div className="cd-unit">
+              <span className="cd-label">HOUR</span>
               <span className="cd-num">{pad(cd.h)}</span>
-              <span className="cd-label">Hours</span>
             </div>
             <span className="cd-colon">:</span>
             <div className="cd-unit">
+              <span className="cd-label">MIN</span>
               <span className="cd-num">{pad(cd.m)}</span>
-              <span className="cd-label">Minutes</span>
             </div>
             <span className="cd-colon">:</span>
             <div className="cd-unit">
+              <span className="cd-label">SEC</span>
               <span className="cd-num">{pad(cd.s)}</span>
-              <span className="cd-label">Seconds</span>
             </div>
           </div>
         </section>
@@ -526,12 +532,28 @@ function App() {
                       <span className="acct-name">박성현</span>
                     </div>
                     <div className="acct-detail">
-                      <span className="acct-bank">카카오뱅크</span>
-                      <span className="acct-number">0000-00-0000000</span>
+                      <span className="acct-bank">국민</span>
+                      <span className="acct-number">433401-01-469146</span>
                       <button
                         type="button"
                         className="copy-btn"
-                        onClick={() => { navigator.clipboard.writeText('0000-00-0000000'); showToast('계좌번호가 복사되었습니다.') }}
+                        onClick={() => { navigator.clipboard.writeText('433401-01-469146'); showToast('계좌번호가 복사되었습니다.') }}
+                      >
+                        복사
+                      </button>
+                    </div>
+                  </div>
+                  <div className="acct-row">
+                    <div className="acct-info">
+                      <span className="acct-label">Zelle</span>
+                      <span className="acct-name">Daniel Park</span>
+                    </div>
+                    <div className="acct-detail">
+                      <span className="acct-number">dannypark95@gmail.com</span>
+                      <button
+                        type="button"
+                        className="copy-btn"
+                        onClick={() => { navigator.clipboard.writeText('dannypark95@gmail.com'); showToast('이메일이 복사되었습니다.') }}
                       >
                         복사
                       </button>
@@ -658,10 +680,7 @@ function App() {
           <img src={endingPhoto} alt="성현과 예은" />
           <div className="ending-overlay" />
           <div className="ending-text fade-up">
-            <p>평생을 같이 하고 싶은</p>
-            <p>사람이 생겼습니다.</p>
-            <p>서로 아껴주고 배려하며</p>
-            <p>사랑으로 베풀며 살겠습니다.</p>
+            <p>감사합니다.</p>
           </div>
         </section>
 
