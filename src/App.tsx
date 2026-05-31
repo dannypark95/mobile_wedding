@@ -293,10 +293,16 @@ function AdminPanel({
   const galleryScrollRef = useRef<HTMLDivElement>(null)
   const galleryAutoScrollRef = useRef<number | null>(null)
   const galleryAutoScrollDirectionRef = useRef(0)
+  const galleryPointerDragRef = useRef<{ index: number, pointerId: number } | null>(null)
+  const galleryDropCueRef = useRef<{ index: number, side: 'before' | 'after' } | null>(null)
 
   const update = useCallback((patch: Partial<WeddingSettings>) => {
     setSettings((current) => ({ ...current, ...patch }))
   }, [setSettings])
+
+  useEffect(() => {
+    galleryDropCueRef.current = galleryDropCue
+  }, [galleryDropCue])
 
   const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto' | 'endingPhoto') => {
     const file = event.target.files?.[0]
@@ -333,12 +339,12 @@ function AdminPanel({
     }
   }, [])
 
-  const updateGalleryAutoScroll = useCallback((event: DragEvent<HTMLElement>) => {
+  const updateGalleryAutoScrollAt = useCallback((clientX: number) => {
     const container = galleryScrollRef.current
     if (!container) return
     const rect = container.getBoundingClientRect()
     const edge = 54
-    const direction = event.clientX < rect.left + edge ? -1 : event.clientX > rect.right - edge ? 1 : 0
+    const direction = clientX < rect.left + edge ? -1 : clientX > rect.right - edge ? 1 : 0
     galleryAutoScrollDirectionRef.current = direction
     if (!direction || galleryAutoScrollRef.current !== null) return
 
@@ -355,12 +361,44 @@ function AdminPanel({
     galleryAutoScrollRef.current = window.requestAnimationFrame(tick)
   }, [])
 
+  const updateGalleryAutoScroll = useCallback((event: DragEvent<HTMLElement>) => {
+    updateGalleryAutoScrollAt(event.clientX)
+  }, [updateGalleryAutoScrollAt])
+
+  const updateGalleryDropCueAt = useCallback((clientX: number) => {
+    const container = galleryScrollRef.current
+    if (!container) return
+    const items = Array.from(container.querySelectorAll<HTMLElement>('[data-gallery-index]'))
+    if (!items.length) return
+
+    let closest = items[0]
+    let closestDistance = Number.POSITIVE_INFINITY
+    items.forEach((item) => {
+      const rect = item.getBoundingClientRect()
+      const center = rect.left + rect.width / 2
+      const distance = Math.abs(clientX - center)
+      if (distance < closestDistance) {
+        closest = item
+        closestDistance = distance
+      }
+    })
+
+    const rect = closest.getBoundingClientRect()
+    const index = Number(closest.dataset.galleryIndex)
+    if (!Number.isInteger(index)) return
+    const cue = { index, side: clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const }
+    galleryDropCueRef.current = cue
+    setGalleryDropCue(cue)
+  }, [])
+
   const updateGalleryDropCue = useCallback((event: DragEvent<HTMLElement>, index: number) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     updateGalleryAutoScroll(event)
     const rect = event.currentTarget.getBoundingClientRect()
-    setGalleryDropCue({ index, side: event.clientX < rect.left + rect.width / 2 ? 'before' : 'after' })
+    const cue = { index, side: event.clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const }
+    galleryDropCueRef.current = cue
+    setGalleryDropCue(cue)
   }, [updateGalleryAutoScroll])
 
   const moveGalleryPhoto = useCallback((index: number, nextIndex: number) => {
@@ -380,6 +418,20 @@ function AdminPanel({
     update({ galleryPhotos: settings.galleryPhotos.filter((_, i) => i !== index) })
     showToast('갤러리 사진을 삭제했어요. 저장 버튼을 눌러 반영해주세요.')
   }, [settings.galleryPhotos, showToast, update])
+
+  const finishGalleryPointerDrag = useCallback(() => {
+    const drag = galleryPointerDragRef.current
+    const cue = galleryDropCueRef.current
+    if (drag && cue) {
+      const insertionIndex = cue.side === 'after' ? cue.index + 1 : cue.index
+      moveGalleryPhoto(drag.index, insertionIndex)
+    }
+    galleryPointerDragRef.current = null
+    galleryDropCueRef.current = null
+    setDraggingGalleryIndex(null)
+    setGalleryDropCue(null)
+    stopGalleryAutoScroll()
+  }, [moveGalleryPhoto, stopGalleryAutoScroll])
 
   const saveSection = useCallback(async (label: string) => {
     try {
@@ -580,6 +632,7 @@ function AdminPanel({
           }}
           onDragLeave={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              galleryDropCueRef.current = null
               setGalleryDropCue(null)
               stopGalleryAutoScroll()
             }
@@ -593,6 +646,7 @@ function AdminPanel({
                 galleryDropCue?.index === index ? `admin-gallery-drop-${galleryDropCue.side}` : '',
               ].filter(Boolean).join(' ')}
               key={`${photo.slice(0, 30)}-${index}`}
+              data-gallery-index={index}
               draggable
               onDragStart={(event) => {
                 setDraggingGalleryIndex(index)
@@ -608,10 +662,44 @@ function AdminPanel({
                   moveGalleryPhoto(fromIndex, insertionIndex)
                 }
                 setDraggingGalleryIndex(null)
+                galleryDropCueRef.current = null
                 setGalleryDropCue(null)
                 stopGalleryAutoScroll()
               }}
               onDragEnd={() => {
+                setDraggingGalleryIndex(null)
+                galleryDropCueRef.current = null
+                setGalleryDropCue(null)
+                stopGalleryAutoScroll()
+              }}
+              onPointerDown={(event) => {
+                if (event.pointerType === 'mouse') return
+                if ((event.target as HTMLElement).closest('button')) return
+                event.preventDefault()
+                event.currentTarget.setPointerCapture(event.pointerId)
+                galleryPointerDragRef.current = { index, pointerId: event.pointerId }
+                setDraggingGalleryIndex(index)
+                galleryDropCueRef.current = { index, side: 'before' }
+                setGalleryDropCue({ index, side: 'before' })
+              }}
+              onPointerMove={(event) => {
+                const drag = galleryPointerDragRef.current
+                if (!drag || drag.pointerId !== event.pointerId) return
+                event.preventDefault()
+                updateGalleryAutoScrollAt(event.clientX)
+                updateGalleryDropCueAt(event.clientX)
+              }}
+              onPointerUp={(event) => {
+                const drag = galleryPointerDragRef.current
+                if (!drag || drag.pointerId !== event.pointerId) return
+                event.preventDefault()
+                finishGalleryPointerDrag()
+              }}
+              onPointerCancel={(event) => {
+                const drag = galleryPointerDragRef.current
+                if (!drag || drag.pointerId !== event.pointerId) return
+                galleryPointerDragRef.current = null
+                galleryDropCueRef.current = null
                 setDraggingGalleryIndex(null)
                 setGalleryDropCue(null)
                 stopGalleryAutoScroll()

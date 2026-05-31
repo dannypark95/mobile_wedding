@@ -182,7 +182,8 @@
   color: #fafafa;
   padding: 10px 12px;
   font-family: var(--ff-body);
-  font-size: 13px;
+  font-size: 16px;
+  min-height: 44px;
 }
 
 .admin-textarea {
@@ -212,6 +213,7 @@
   font-size: 12px;
   font-weight: 700;
   text-align: center;
+  min-height: 44px;
 }
 
 .admin-ghost {
@@ -749,16 +751,56 @@
   .app-root-admin {
     padding: 0;
     background: #fff;
+    min-height: 100svh;
   }
 
   .admin-panel {
-    width: calc(100% - 20px);
-    margin-top: 10px;
-    padding: 16px;
+    width: 100%;
+    margin-top: 0;
+    padding: max(14px, env(safe-area-inset-top)) 14px 16px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
   }
 
   .admin-preview-shell {
     max-width: 100%;
+  }
+
+  .admin-section-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    margin: 0 -14px;
+    padding: 8px 14px;
+    background: rgba(9, 9, 11, 0.96);
+    backdrop-filter: blur(10px);
+  }
+
+  .admin-section-tabs button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  .admin-helper {
+    font-size: 13px;
+  }
+
+  .admin-gallery-list {
+    margin: 0 -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+    scroll-padding-inline: 14px;
+  }
+
+  .admin-gallery-item {
+    flex-basis: 142px;
+  }
+
+  .admin-gallery-remove {
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
   }
 
   .admin-preview-label {
@@ -773,6 +815,38 @@
 
   .app-root-admin .invitation {
     box-shadow: none;
+  }
+
+  .map-buttons {
+    gap: 8px;
+  }
+
+  .map-btn {
+    min-height: 66px;
+    font-size: 11px;
+  }
+
+  .acct-btn,
+  .copy-btn,
+  .rsvp-btn,
+  .gb-submit-btn {
+    min-height: 44px;
+  }
+
+  .gb-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .gb-modal {
+    max-width: none;
+    max-height: 88svh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .lightbox-overlay {
+    padding: max(16px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom));
   }
 }
 
@@ -1157,6 +1231,7 @@
 }
 .gallery-slide img {
   width: 100%;
+  aspect-ratio: 3 / 4;
   display: block;
   object-fit: cover;
   border-radius: 10px;
@@ -1525,7 +1600,8 @@
   padding: 12px 14px;
   border: 1px solid var(--c-main40);
   font-family: var(--ff-body);
-  font-size: 13px;
+  font-size: 16px;
+  min-height: 44px;
   color: var(--c-black);
   outline: none;
   box-sizing: border-box;
@@ -1822,4 +1898,38 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+@media (max-width: 520px) {
+  .map-buttons {
+    gap: 8px;
+  }
+
+  .map-btn {
+    min-height: 66px;
+    font-size: 11px;
+  }
+
+  .acct-btn,
+  .copy-btn,
+  .rsvp-btn,
+  .gb-submit-btn {
+    min-height: 44px;
+  }
+
+  .gb-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .gb-modal {
+    max-width: none;
+    max-height: 88svh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .lightbox-overlay {
+    padding: max(16px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom));
+  }
 }
