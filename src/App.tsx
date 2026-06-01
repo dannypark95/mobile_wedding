@@ -288,15 +288,32 @@ function AdminPanel({
   const [authed, setAuthed] = useState(() => sessionStorage.getItem('mobileWeddingAdminAuthed') === '1')
   const [draggingGalleryIndex, setDraggingGalleryIndex] = useState<number | null>(null)
   const [galleryDropIndex, setGalleryDropIndex] = useState<number | null>(null)
+  const [galleryPreviewScroll, setGalleryPreviewScroll] = useState(0)
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null)
   const [activeSection, setActiveSection] = useState<AdminSectionKey>('main')
   const galleryListRef = useRef<HTMLDivElement>(null)
+  const galleryPreviewRef = useRef<HTMLDivElement>(null)
   const galleryPointerDragRef = useRef<{ index: number, pointerId: number } | null>(null)
   const galleryDropIndexRef = useRef<number | null>(null)
 
   const update = useCallback((patch: Partial<WeddingSettings>) => {
     setSettings((current) => ({ ...current, ...patch }))
   }, [setSettings])
+
+  const updateGalleryPreviewScroll = useCallback(() => {
+    const preview = galleryPreviewRef.current
+    if (!preview) return
+    const max = preview.scrollWidth - preview.clientWidth
+    setGalleryPreviewScroll(max > 0 ? Math.round((preview.scrollLeft / max) * 100) : 0)
+  }, [])
+
+  const setGalleryPreviewScrollPercent = useCallback((value: number) => {
+    const preview = galleryPreviewRef.current
+    if (!preview) return
+    const max = preview.scrollWidth - preview.clientWidth
+    preview.scrollLeft = max * (value / 100)
+    setGalleryPreviewScroll(value)
+  }, [])
 
 
   const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto' | 'endingPhoto') => {
@@ -567,7 +584,21 @@ function AdminPanel({
           <input type="file" accept={IMAGE_ACCEPT} multiple onChange={addGalleryPhotos} />
           갤러리 사진 추가
         </label>
-        <div className="admin-gallery-preview" aria-label="갤러리 미리보기">
+        <input
+          className="admin-gallery-scrollbar"
+          type="range"
+          min="0"
+          max="100"
+          value={galleryPreviewScroll}
+          aria-label="갤러리 미리보기 스크롤"
+          onChange={(event) => setGalleryPreviewScrollPercent(Number(event.target.value))}
+        />
+        <div
+          className="admin-gallery-preview"
+          aria-label="갤러리 미리보기"
+          ref={galleryPreviewRef}
+          onScroll={updateGalleryPreviewScroll}
+        >
           {settings.galleryPhotos.map((photo, index) => (
             <img src={photo} alt={`갤러리 미리보기 ${index + 1}`} key={`${photo}-preview-${index}`} />
           ))}
