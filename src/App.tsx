@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback, useRef, type ChangeEvent, type Dispatch, type DragEvent, type PointerEvent, type SetStateAction } from 'react'
+﻿import { useEffect, useState, useCallback, useRef, type ChangeEvent, type Dispatch, type PointerEvent, type SetStateAction } from 'react'
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
@@ -287,22 +287,17 @@ function AdminPanel({
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(() => sessionStorage.getItem('mobileWeddingAdminAuthed') === '1')
   const [draggingGalleryIndex, setDraggingGalleryIndex] = useState<number | null>(null)
-  const [galleryDropCue, setGalleryDropCue] = useState<{ index: number, side: 'before' | 'after' } | null>(null)
+  const [galleryDropIndex, setGalleryDropIndex] = useState<number | null>(null)
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null)
   const [activeSection, setActiveSection] = useState<AdminSectionKey>('main')
-  const galleryScrollRef = useRef<HTMLDivElement>(null)
-  const galleryAutoScrollRef = useRef<number | null>(null)
-  const galleryAutoScrollDirectionRef = useRef(0)
+  const galleryListRef = useRef<HTMLDivElement>(null)
   const galleryPointerDragRef = useRef<{ index: number, pointerId: number } | null>(null)
-  const galleryDropCueRef = useRef<{ index: number, side: 'before' | 'after' } | null>(null)
+  const galleryDropIndexRef = useRef<number | null>(null)
 
   const update = useCallback((patch: Partial<WeddingSettings>) => {
     setSettings((current) => ({ ...current, ...patch }))
   }, [setSettings])
 
-  useEffect(() => {
-    galleryDropCueRef.current = galleryDropCue
-  }, [galleryDropCue])
 
   const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto' | 'endingPhoto') => {
     const file = event.target.files?.[0]
@@ -331,76 +326,28 @@ function AdminPanel({
     }
   }, [settings.galleryPhotos, showToast, update])
 
-  const stopGalleryAutoScroll = useCallback(() => {
-    galleryAutoScrollDirectionRef.current = 0
-    if (galleryAutoScrollRef.current !== null) {
-      window.cancelAnimationFrame(galleryAutoScrollRef.current)
-      galleryAutoScrollRef.current = null
-    }
-  }, [])
-
-  const updateGalleryAutoScrollAt = useCallback((clientX: number) => {
-    const container = galleryScrollRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const edge = 54
-    const direction = clientX < rect.left + edge ? -1 : clientX > rect.right - edge ? 1 : 0
-    galleryAutoScrollDirectionRef.current = direction
-    if (!direction || galleryAutoScrollRef.current !== null) return
-
-    const tick = () => {
-      const current = galleryScrollRef.current
-      const currentDirection = galleryAutoScrollDirectionRef.current
-      if (!current || !currentDirection) {
-        galleryAutoScrollRef.current = null
-        return
-      }
-      current.scrollLeft += currentDirection * 12
-      galleryAutoScrollRef.current = window.requestAnimationFrame(tick)
-    }
-    galleryAutoScrollRef.current = window.requestAnimationFrame(tick)
-  }, [])
-
-  const updateGalleryAutoScroll = useCallback((event: DragEvent<HTMLElement>) => {
-    updateGalleryAutoScrollAt(event.clientX)
-  }, [updateGalleryAutoScrollAt])
-
-  const updateGalleryDropCueAt = useCallback((clientX: number) => {
-    const container = galleryScrollRef.current
+  const updateGalleryDropIndexAt = useCallback((clientY: number) => {
+    const container = galleryListRef.current
     if (!container) return
     const items = Array.from(container.querySelectorAll<HTMLElement>('[data-gallery-index]'))
-    if (!items.length) return
+    if (!items.length) {
+      galleryDropIndexRef.current = 0
+      setGalleryDropIndex(0)
+      return
+    }
 
-    let closest = items[0]
-    let closestDistance = Number.POSITIVE_INFINITY
-    items.forEach((item) => {
+    let nextIndex = items.length
+    for (const item of items) {
       const rect = item.getBoundingClientRect()
-      const center = rect.left + rect.width / 2
-      const distance = Math.abs(clientX - center)
-      if (distance < closestDistance) {
-        closest = item
-        closestDistance = distance
+      const index = Number(item.dataset.galleryIndex)
+      if (clientY < rect.top + rect.height / 2) {
+        nextIndex = Number.isInteger(index) ? index : nextIndex
+        break
       }
-    })
-
-    const rect = closest.getBoundingClientRect()
-    const index = Number(closest.dataset.galleryIndex)
-    if (!Number.isInteger(index)) return
-    const cue = { index, side: clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const }
-    galleryDropCueRef.current = cue
-    setGalleryDropCue(cue)
+    }
+    galleryDropIndexRef.current = nextIndex
+    setGalleryDropIndex(nextIndex)
   }, [])
-
-  const updateGalleryDropCue = useCallback((event: DragEvent<HTMLElement>, index: number) => {
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-    updateGalleryAutoScroll(event)
-    const rect = event.currentTarget.getBoundingClientRect()
-    const cue = { index, side: event.clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const }
-    galleryDropCueRef.current = cue
-    setGalleryDropCue(cue)
-  }, [updateGalleryAutoScroll])
-
   const moveGalleryPhoto = useCallback((index: number, nextIndex: number) => {
     if (index === nextIndex || nextIndex < 0 || nextIndex > settings.galleryPhotos.length) return
     const photos = [...settings.galleryPhotos]
@@ -421,18 +368,15 @@ function AdminPanel({
 
   const finishGalleryPointerDrag = useCallback(() => {
     const drag = galleryPointerDragRef.current
-    const cue = galleryDropCueRef.current
-    if (drag && cue) {
-      const insertionIndex = cue.side === 'after' ? cue.index + 1 : cue.index
-      moveGalleryPhoto(drag.index, insertionIndex)
+    const nextIndex = galleryDropIndexRef.current
+    if (drag && nextIndex !== null) {
+      moveGalleryPhoto(drag.index, nextIndex)
     }
     galleryPointerDragRef.current = null
-    galleryDropCueRef.current = null
+    galleryDropIndexRef.current = null
     setDraggingGalleryIndex(null)
-    setGalleryDropCue(null)
-    stopGalleryAutoScroll()
-  }, [moveGalleryPhoto, stopGalleryAutoScroll])
-
+    setGalleryDropIndex(null)
+  }, [moveGalleryPhoto])
   const saveSection = useCallback(async (label: string) => {
     try {
       await setDoc(doc(db, SETTINGS_DOC_PATH), {
@@ -623,104 +567,76 @@ function AdminPanel({
           <input type="file" accept={IMAGE_ACCEPT} multiple onChange={addGalleryPhotos} />
           갤러리 사진 추가
         </label>
-        <div
-          className="admin-gallery-list"
-          ref={galleryScrollRef}
-          onDragOver={(event) => {
-            event.preventDefault()
-            updateGalleryAutoScroll(event)
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              galleryDropCueRef.current = null
-              setGalleryDropCue(null)
-              stopGalleryAutoScroll()
-            }
-          }}
-        >
+        <div className="admin-gallery-preview" aria-label="갤러리 미리보기">
           {settings.galleryPhotos.map((photo, index) => (
-            <div
-              className={[
-                'admin-gallery-item',
-                draggingGalleryIndex === index ? 'admin-gallery-item-dragging' : '',
-                galleryDropCue?.index === index ? `admin-gallery-drop-${galleryDropCue.side}` : '',
-              ].filter(Boolean).join(' ')}
-              key={`${photo.slice(0, 30)}-${index}`}
-              data-gallery-index={index}
-              draggable
-              onDragStart={(event) => {
-                setDraggingGalleryIndex(index)
-                event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData('text/plain', String(index))
-              }}
-              onDragOver={(event) => updateGalleryDropCue(event, index)}
-              onDrop={(event) => {
-                event.preventDefault()
-                const fromIndex = Number(event.dataTransfer.getData('text/plain'))
-                if (Number.isInteger(fromIndex)) {
-                  const insertionIndex = galleryDropCue?.side === 'after' ? index + 1 : index
-                  moveGalleryPhoto(fromIndex, insertionIndex)
-                }
-                setDraggingGalleryIndex(null)
-                galleryDropCueRef.current = null
-                setGalleryDropCue(null)
-                stopGalleryAutoScroll()
-              }}
-              onDragEnd={() => {
-                setDraggingGalleryIndex(null)
-                galleryDropCueRef.current = null
-                setGalleryDropCue(null)
-                stopGalleryAutoScroll()
-              }}
-              onPointerDown={(event) => {
-                if (event.pointerType === 'mouse') return
-                if ((event.target as HTMLElement).closest('button')) return
-                event.preventDefault()
-                event.currentTarget.setPointerCapture(event.pointerId)
-                galleryPointerDragRef.current = { index, pointerId: event.pointerId }
-                setDraggingGalleryIndex(index)
-                galleryDropCueRef.current = { index, side: 'before' }
-                setGalleryDropCue({ index, side: 'before' })
-              }}
-              onPointerMove={(event) => {
-                const drag = galleryPointerDragRef.current
-                if (!drag || drag.pointerId !== event.pointerId) return
-                event.preventDefault()
-                updateGalleryAutoScrollAt(event.clientX)
-                updateGalleryDropCueAt(event.clientX)
-              }}
-              onPointerUp={(event) => {
-                const drag = galleryPointerDragRef.current
-                if (!drag || drag.pointerId !== event.pointerId) return
-                event.preventDefault()
-                finishGalleryPointerDrag()
-              }}
-              onPointerCancel={(event) => {
-                const drag = galleryPointerDragRef.current
-                if (!drag || drag.pointerId !== event.pointerId) return
-                galleryPointerDragRef.current = null
-                galleryDropCueRef.current = null
-                setDraggingGalleryIndex(null)
-                setGalleryDropCue(null)
-                stopGalleryAutoScroll()
-              }}
-            >
-              <img src={photo} alt={`Gallery ${index + 1}`} />
-              <button
-                type="button"
-                className="admin-gallery-remove"
-                aria-label={`갤러리 사진 ${index + 1} 삭제`}
-                onClick={() => removeGalleryPhoto(index)}
+            <img src={photo} alt={`갤러리 미리보기 ${index + 1}`} key={`${photo}-preview-${index}`} />
+          ))}
+        </div>
+        <div className="admin-gallery-sort" ref={galleryListRef}>
+          {galleryDropIndex === 0 && <div className="admin-gallery-drop-line" />}
+          {settings.galleryPhotos.map((photo, index) => (
+            <div key={`${photo.slice(0, 30)}-${index}`} data-gallery-index={index}>
+              <div
+                className={[
+                  'admin-gallery-row',
+                  draggingGalleryIndex === index ? 'admin-gallery-row-dragging' : '',
+                ].filter(Boolean).join(' ')}
               >
-                ×
-              </button>
-              <span className="admin-gallery-grip" aria-hidden="true">⋮⋮</span>
+                <img src={photo} alt={`Gallery ${index + 1}`} />
+                <div className="admin-gallery-row-copy">
+                  <strong>{index + 1}번째 사진</strong>
+                  <span>오른쪽 핸들을 잡고 위아래로 이동</span>
+                </div>
+                <button
+                  type="button"
+                  className="admin-gallery-remove"
+                  aria-label={`갤러리 사진 ${index + 1} 삭제`}
+                  onClick={() => removeGalleryPhoto(index)}
+                >
+                  ×
+                </button>
+                <button
+                  type="button"
+                  className="admin-gallery-handle"
+                  aria-label={`갤러리 사진 ${index + 1} 순서 변경`}
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    galleryPointerDragRef.current = { index, pointerId: event.pointerId }
+                    galleryDropIndexRef.current = index
+                    setDraggingGalleryIndex(index)
+                    setGalleryDropIndex(index)
+                  }}
+                  onPointerMove={(event) => {
+                    const drag = galleryPointerDragRef.current
+                    if (!drag || drag.pointerId !== event.pointerId) return
+                    event.preventDefault()
+                    updateGalleryDropIndexAt(event.clientY)
+                  }}
+                  onPointerUp={(event) => {
+                    const drag = galleryPointerDragRef.current
+                    if (!drag || drag.pointerId !== event.pointerId) return
+                    event.preventDefault()
+                    finishGalleryPointerDrag()
+                  }}
+                  onPointerCancel={(event) => {
+                    const drag = galleryPointerDragRef.current
+                    if (!drag || drag.pointerId !== event.pointerId) return
+                    galleryPointerDragRef.current = null
+                    galleryDropIndexRef.current = null
+                    setDraggingGalleryIndex(null)
+                    setGalleryDropIndex(null)
+                  }}
+                >
+                  |||
+                </button>
+              </div>
+              {galleryDropIndex === index + 1 && <div className="admin-gallery-drop-line" />}
             </div>
           ))}
         </div>
         <button type="button" className="admin-section-save" onClick={() => saveSection('갤러리')}>갤러리 변경사항 저장</button>
       </section>}
-
       {activeSection === 'ending' && <section className="admin-section">
         <h3>마지막 사진</h3>
         <div className="admin-mini-preview admin-mini-ending admin-mobile-crop">
