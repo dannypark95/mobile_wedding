@@ -2,27 +2,41 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>초대합니다</title>
+    <!-- viewport-fit=cover is required for env(safe-area-inset-*) to resolve to anything
+         other than 0 on notched iPhones. No user-scalable=no: guests need to pinch-zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Without this, iOS Safari renders the account numbers as blue tel: links. -->
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <title>박성현 ♥ 배예은 결혼합니다</title>
+    <meta name="description" content="2026. 10. 24 토요일 오후 2:30 · 부산 센텀호텔" />
+    <meta name="theme-color" content="#ffffff" />
 
-    <link rel="icon" type="image/png" href="/mobile_wedding/icon.png" />
-    <link rel="apple-touch-icon" href="/mobile_wedding/icon.png" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="초대합니다" />
-    <meta property="og:description" content="2026. 10. 24 오후 2:30 · 부산 센텀호텔" />
-    <meta property="og:image" content="https://dannypark95.github.io/mobile_wedding/preview.png" />
-    <meta property="og:url" content="https://dannypark95.github.io/mobile_wedding/" />
+    <meta property="og:site_name" content="박성현 ♥ 배예은 결혼합니다" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="박성현 ♥ 배예은 결혼합니다" />
+    <meta property="og:description" content="2026. 10. 24 토요일 오후 2:30 · 부산 센텀호텔" />
+    <meta property="og:image" content="https://sunghyunyeeun.com/preview.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://sunghyunyeeun.com/" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="초대합니다" />
-    <meta name="twitter:description" content="2026. 10. 24 오후 2:30 · 부산 센텀호텔" />
-    <meta name="twitter:image" content="https://dannypark95.github.io/mobile_wedding/preview.png" />
+    <meta name="twitter:title" content="박성현 ♥ 배예은 결혼합니다" />
+    <meta name="twitter:description" content="2026. 10. 24 토요일 오후 2:30 · 부산 센텀호텔" />
+    <meta name="twitter:image" content="https://sunghyunyeeun.com/preview.png" />
 
+    <!-- Nanum Myeongjo is the only webfont the design actually uses. It was previously
+         pulled in via an @import inside the bundled CSS, which forced the browser to
+         download and parse that CSS before it could even discover the font. Loading it
+         here lets the preconnects above do their job. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Noto+Serif+KR:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&display=swap"
       rel="stylesheet"
     />
   </head>

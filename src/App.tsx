@@ -1,699 +1,24 @@
-﻿import { useEffect, useState, useCallback, useRef, type ChangeEvent, type Dispatch, type PointerEvent, type SetStateAction } from 'react'
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import mainPhoto from '../img/main/IMG_0368.jpg'
-import secondPhoto from '../img/main/invitation.jpg'
-import endingPhoto from '../img/main/send_off.JPG'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import mapImage from '../img/main/map.png'
 import kakaoMapLogo from '../img/logo/kakao_map.png'
 import naverMapLogo from '../img/logo/naver_map.png'
 import tmapLogo from '../img/logo/tmap_map.png'
-import bgMusic from '../music/참_아름다워라.mp3'
-
-import p01 from '../img/gallery/IMG_0079.jpg'
-import p02 from '../img/gallery/IMG_0515.jpg'
-import p03 from '../img/gallery/P20260530_175906740_DSCF3166.JPG'
+import bgMusicAac from '../music/bgm.m4a'
+import bgMusicMp3 from '../music/bgm.mp3'
 
 import './App.css'
-import { auth, db, storage } from './firebase'
+import { cropStyle, defaultSettings, fetchSettings, type WeddingSettings } from './settings'
 
-const albumPhotos = [p01, p02, p03]
-const ADMIN_ID = 'admin'
-const ADMIN_EMAIL = 'admin@mobile-wedding.local'
-const SETTINGS_DOC_PATH = 'wedding/settings'
-const IMAGE_ACCEPT = 'image/*,.heic,.heif'
-
-type WeddingSettings = {
-  mainPhoto: string
-  mainNames: string
-  mainDateText: string
-  mainLocationText: string
-  mainNameSize: number
-  mainDetailSize: number
-  mainTextY: number
-  mainCropZoom: number
-  mainCropX: number
-  mainCropY: number
-  invitationPhoto: string
-  invitationCropZoom: number
-  invitationCropX: number
-  invitationCropY: number
-  invitationLabel: string
-  invitationHeading: string
-  invitationBody: string
-  invitationGroomLine: string
-  invitationBrideLine: string
-  galleryPhotos: string[]
-  galleryLabel: string
-  endingPhoto: string
-  endingCropZoom: number
-  endingCropX: number
-  endingCropY: number
-  endingOverlayOpacity: number
-  endingText: string
-  endingTextSize: number
-  endingTextTop: number
-  endingTextFont: string
-}
-
-type NumericSettingKey = {
-  [K in keyof WeddingSettings]: WeddingSettings[K] extends number ? K : never
-}[keyof WeddingSettings]
-
-type CropEditorState = {
-  title: string
-  photo: string
-  zoomKey: NumericSettingKey
-  xKey: NumericSettingKey
-  yKey: NumericSettingKey
-  brightness?: number
-}
-
-type AdminSectionKey = 'main' | 'invitation' | 'gallery' | 'ending'
-
-const defaultSettings: WeddingSettings = {
-  mainPhoto,
-  mainNames: '박성현 · 배예은',
-  mainDateText: '2026년 10월 24일 토요일 오후 2시 30분',
-  mainLocationText: '부산 센텀호텔 4F 벨라홀',
-  mainNameSize: 18,
-  mainDetailSize: 13,
-  mainTextY: 0,
-  mainCropZoom: 100,
-  mainCropX: 50,
-  mainCropY: 50,
-  invitationPhoto: secondPhoto,
-  invitationCropZoom: 100,
-  invitationCropX: 50,
-  invitationCropY: 50,
-  invitationLabel: 'INVITATION',
-  invitationHeading: '초대합니다.',
-  invitationBody: '서로가 마주 보며 다져온 사랑을\n이제 함께 한곳을 바라보며 걸어갈 수 있는\n큰 사랑으로 키우고자 합니다.\n저희가 지켜나갈 수 있게\n앞날을 축복해 주시면 감사하겠습니다.',
-  invitationGroomLine: '박 영 준 의 아들  박 성 현',
-  invitationBrideLine: '김 미 경 의 딸  배 예 은',
-  galleryPhotos: albumPhotos,
-  galleryLabel: 'GALLERY',
-  endingPhoto,
-  endingCropZoom: 100,
-  endingCropX: 50,
-  endingCropY: 50,
-  endingOverlayOpacity: 35,
-  endingText: '감사합니다.',
-  endingTextSize: 16,
-  endingTextTop: 50,
-  endingTextFont: 'serif',
-}
-function loadSettings() {
-  return defaultSettings
-}
-
-function isHeicFile(file: File) {
-  return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name)
-}
-
-async function normalizeImageFile(file: File) {
-  if (!isHeicFile(file)) return file
-  const heic2any = (await import('heic2any')).default
-  const converted = await heic2any({
-    blob: file,
-    toType: 'image/jpeg',
-    quality: 0.9,
-  })
-  return Array.isArray(converted) ? converted[0] : converted
-}
-
-function resizeImage(file: File, maxSize = 1800, quality = 0.82) {
-  return new Promise<Blob>((resolve, reject) => {
-    const image = new Image()
-    const source = normalizeImageFile(file)
-    source.then((imageBlob) => {
-    const url = URL.createObjectURL(imageBlob)
-    image.onload = () => {
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(image.width * scale)
-      canvas.height = Math.round(image.height * scale)
-      const context = canvas.getContext('2d')
-      if (!context) {
-        URL.revokeObjectURL(url)
-        reject(new Error('Canvas is not available.'))
-        return
-      }
-      context.drawImage(image, 0, 0, canvas.width, canvas.height)
-      canvas.toBlob((blob) => {
-        URL.revokeObjectURL(url)
-        if (!blob) {
-          reject(new Error('Unable to process image.'))
-          return
-        }
-        resolve(blob)
-      }, 'image/jpeg', quality)
-    }
-    image.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('Unable to load image.'))
-    }
-    image.src = url
-    }).catch(reject)
-  })
-}
-
-async function uploadImageFile(file: File, folder: string) {
-  const blob = await resizeImage(file)
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')
-  const imageRef = ref(storage, `wedding/${folder}/${Date.now()}-${safeName}`)
-  await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' })
-  return getDownloadURL(imageRef)
-}
+// The admin panel pulls in the Firebase SDK (auth + firestore + storage). Loading it lazily
+// keeps it out of the bundle guests download; only /admin ever pays for it.
+const AdminPanel = lazy(() => import('./AdminPanel'))
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }
 
-function cropStyle(zoom: number, x: number, y: number) {
-  return {
-    objectPosition: `${x}% ${y}%`,
-    transform: `scale(${zoom / 100})`,
-    transformOrigin: `${x}% ${y}%`,
-  }
-}
-
-function clampPercent(value: number) {
-  return Math.min(100, Math.max(0, value))
-}
-
-function clampZoom(value: number) {
-  return Math.min(180, Math.max(100, value))
-}
-
-function CropEditor({
-  editor,
-  settings,
-  onCancel,
-  onDone,
-}: {
-  editor: CropEditorState
-  settings: WeddingSettings
-  onCancel: () => void
-  onDone: (patch: Partial<WeddingSettings>) => void
-}) {
-  const [zoom, setZoom] = useState(Number(settings[editor.zoomKey]))
-  const [x, setX] = useState(Number(settings[editor.xKey]))
-  const [y, setY] = useState(Number(settings[editor.yKey]))
-  const dragRef = useRef<{
-    startClientX: number
-    startClientY: number
-    startX: number
-    startY: number
-  } | null>(null)
-
-  const startDrag = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId)
-    dragRef.current = {
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startX: x,
-      startY: y,
-    }
-  }, [x, y])
-
-  const moveDrag = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current
-    if (!drag) return
-    setX(clampPercent(drag.startX - (event.clientX - drag.startClientX) / 2))
-    setY(clampPercent(drag.startY - (event.clientY - drag.startClientY) / 2))
-  }, [])
-
-  const endDrag = useCallback(() => {
-    dragRef.current = null
-  }, [])
-
-  return (
-    <div className="crop-editor" role="dialog" aria-modal="true" aria-label={`${editor.title} 크롭 조정`}>
-      <div className="crop-editor-top">
-        <button type="button" onClick={onCancel}>취소</button>
-        <strong>{editor.title}</strong>
-        <button type="button" className="crop-editor-done" onClick={() => onDone({
-          [editor.zoomKey]: zoom,
-          [editor.xKey]: x,
-          [editor.yKey]: y,
-        } as Partial<WeddingSettings>)}>
-          완료
-        </button>
-      </div>
-
-      <div className="crop-editor-stage">
-        <div
-          className="crop-editor-frame"
-          onPointerDown={startDrag}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        >
-          <img
-            src={editor.photo}
-            alt={`${editor.title} 크롭 미리보기`}
-            style={{
-              ...cropStyle(zoom, x, y),
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="crop-editor-bottom">
-        <span className="crop-editor-chip">CROP</span>
-        <div className="crop-editor-zoom">
-          <button type="button" onClick={() => setZoom((current) => clampZoom(current - 5))} aria-label="사진 축소">-</button>
-          <span>{zoom}%</span>
-          <button type="button" onClick={() => setZoom((current) => clampZoom(current + 5))} aria-label="사진 확대">+</button>
-        </div>
-        <p>사진을 드래그해서 위치를 맞춰주세요.</p>
-      </div>
-    </div>
-  )
-}
-
-function AdminPanel({
-  settings,
-  setSettings,
-  showToast,
-}: {
-  settings: WeddingSettings
-  setSettings: Dispatch<SetStateAction<WeddingSettings>>
-  showToast: (msg: string) => void
-}) {
-  const [adminId, setAdminId] = useState(ADMIN_ID)
-  const [password, setPassword] = useState('')
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('mobileWeddingAdminAuthed') === '1')
-  const [draggingGalleryIndex, setDraggingGalleryIndex] = useState<number | null>(null)
-  const [galleryDropIndex, setGalleryDropIndex] = useState<number | null>(null)
-  const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null)
-  const [activeSection, setActiveSection] = useState<AdminSectionKey>('main')
-  const galleryListRef = useRef<HTMLDivElement>(null)
-  const galleryPointerDragRef = useRef<{ index: number, pointerId: number } | null>(null)
-  const galleryDropIndexRef = useRef<number | null>(null)
-
-  const update = useCallback((patch: Partial<WeddingSettings>) => {
-    setSettings((current) => ({ ...current, ...patch }))
-  }, [setSettings])
-
-  const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto' | 'endingPhoto') => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const label = key === 'mainPhoto' ? '메인 사진' : key === 'invitationPhoto' ? '초대글 사진' : '마지막 사진'
-    try {
-      const url = await uploadImageFile(file, key)
-      update({ [key]: url })
-      showToast(`${label}을 업로드했어요. 저장 버튼을 눌러 반영해주세요.`)
-      event.target.value = ''
-    } catch {
-      showToast(`${label} 업로드에 실패했어요. Firebase 로그인과 Storage 권한을 확인해주세요.`)
-    }
-  }, [showToast, update])
-
-  const addGalleryPhotos = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? [])
-    if (!files.length) return
-    try {
-      const photos = await Promise.all(files.map((file) => uploadImageFile(file, 'gallery')))
-      update({ galleryPhotos: [...settings.galleryPhotos, ...photos] })
-      showToast(`갤러리에 사진 ${photos.length}장을 업로드했어요. 저장 버튼을 눌러 반영해주세요.`)
-      event.target.value = ''
-    } catch {
-      showToast('갤러리 업로드에 실패했어요. Firebase 로그인과 Storage 권한을 확인해주세요.')
-    }
-  }, [settings.galleryPhotos, showToast, update])
-
-  const updateGalleryDropIndexAt = useCallback((clientY: number) => {
-    const container = galleryListRef.current
-    if (!container) return
-    const items = Array.from(container.querySelectorAll<HTMLElement>('[data-gallery-index]'))
-    if (!items.length) {
-      galleryDropIndexRef.current = 0
-      setGalleryDropIndex(0)
-      return
-    }
-
-    let nextIndex = items.length
-    for (const item of items) {
-      const rect = item.getBoundingClientRect()
-      const index = Number(item.dataset.galleryIndex)
-      if (clientY < rect.top + rect.height / 2) {
-        nextIndex = Number.isInteger(index) ? index : nextIndex
-        break
-      }
-    }
-    galleryDropIndexRef.current = nextIndex
-    setGalleryDropIndex(nextIndex)
-  }, [])
-  const moveGalleryPhoto = useCallback((index: number, nextIndex: number) => {
-    if (index === nextIndex || nextIndex < 0 || nextIndex > settings.galleryPhotos.length) return
-    const photos = [...settings.galleryPhotos]
-    const [photo] = photos.splice(index, 1)
-    const adjustedIndex = index < nextIndex ? nextIndex - 1 : nextIndex
-    if (index === adjustedIndex) return
-    photos.splice(adjustedIndex, 0, photo)
-    update({ galleryPhotos: photos })
-    showToast('갤러리 순서를 바꿨어요. 저장 버튼을 눌러 반영해주세요.')
-  }, [settings.galleryPhotos, showToast, update])
-
-  const removeGalleryPhoto = useCallback((index: number) => {
-    const confirmed = window.confirm(`갤러리 사진 ${index + 1}번을 삭제할까요?`)
-    if (!confirmed) return
-    update({ galleryPhotos: settings.galleryPhotos.filter((_, i) => i !== index) })
-    showToast('갤러리 사진을 삭제했어요. 저장 버튼을 눌러 반영해주세요.')
-  }, [settings.galleryPhotos, showToast, update])
-
-  const finishGalleryPointerDrag = useCallback(() => {
-    const drag = galleryPointerDragRef.current
-    const nextIndex = galleryDropIndexRef.current
-    if (drag && nextIndex !== null) {
-      moveGalleryPhoto(drag.index, nextIndex)
-    }
-    galleryPointerDragRef.current = null
-    galleryDropIndexRef.current = null
-    setDraggingGalleryIndex(null)
-    setGalleryDropIndex(null)
-  }, [moveGalleryPhoto])
-  const saveSection = useCallback(async (label: string) => {
-    try {
-      await setDoc(doc(db, SETTINGS_DOC_PATH), {
-        ...settings,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true })
-      showToast(`${label} 변경사항을 저장했어요.`)
-    } catch {
-      showToast('저장에 실패했어요. Firebase 로그인과 Firestore 권한을 확인해주세요.')
-    }
-  }, [settings, showToast])
-
-  if (!authed) {
-    return (
-      <aside className="admin-panel admin-login" id="admin-editor">
-        <h2>관리자 로그인</h2>
-        <div className="admin-row">
-          <input
-            type="text"
-            className="admin-input"
-            placeholder="아이디"
-            value={adminId}
-            onChange={(event) => setAdminId(event.target.value)}
-          />
-          <input
-            type="password"
-            className="admin-input"
-            placeholder="비밀번호"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <button
-            type="button"
-            className="admin-primary"
-            onClick={async () => {
-              if (adminId.trim() !== ADMIN_ID) {
-                showToast('아이디를 확인해주세요.')
-                return
-              }
-              try {
-                await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password)
-                sessionStorage.setItem('mobileWeddingAdminAuthed', '1')
-                setAuthed(true)
-                showToast('관리자 모드로 들어왔어요. 음악은 자동으로 꺼져 있어요.')
-              } catch {
-                showToast('아이디 또는 비밀번호가 맞지 않습니다.')
-              }
-            }}
-          >
-            로그인
-          </button>
-        </div>
-      </aside>
-    )
-  }
-
-  return (
-    <>
-      {cropEditor && (
-        <CropEditor
-          editor={cropEditor}
-          settings={settings}
-          onCancel={() => setCropEditor(null)}
-          onDone={(patch) => {
-            update(patch)
-            setCropEditor(null)
-            showToast('사진 크롭을 적용했어요.')
-          }}
-        />
-      )}
-      <aside className="admin-panel" id="admin-editor">
-      <div className="admin-head">
-        <div>
-          <span className="admin-kicker">관리자</span>
-          <h2>청첩장 편집</h2>
-        </div>
-        <button
-          type="button"
-          className="admin-ghost"
-          onClick={async () => {
-            await signOut(auth)
-            sessionStorage.removeItem('mobileWeddingAdminAuthed')
-            setAuthed(false)
-            setPassword('')
-            showToast('로그아웃했어요.')
-          }}
-        >
-          로그아웃
-        </button>
-      </div>
-      <div className="admin-section-tabs" aria-label="편집 섹션 선택">
-        <button type="button" className={activeSection === 'main' ? 'is-active' : ''} onClick={() => setActiveSection('main')}>메인</button>
-        <button type="button" className={activeSection === 'invitation' ? 'is-active' : ''} onClick={() => setActiveSection('invitation')}>초대글</button>
-        <button type="button" className={activeSection === 'gallery' ? 'is-active' : ''} onClick={() => setActiveSection('gallery')}>갤러리</button>
-        <button type="button" className={activeSection === 'ending' ? 'is-active' : ''} onClick={() => setActiveSection('ending')}>마지막</button>
-      </div>
-      <p className="admin-helper">
-        각 섹션에서 수정한 뒤 해당 섹션의 저장 버튼을 눌러주세요. 저장 전에는 현재 화면의 미리보기에서만 확인됩니다.
-      </p>
-
-      {activeSection === 'main' && <section className="admin-section">
-        <h3>메인 사진</h3>
-        <div className="admin-real-preview admin-real-main">
-          <div className="hero-photo">
-            <div className="hero-top hero-date-overlay">
-              <span className="hero-date-full">2026 / 10 / 24</span>
-              <span className="hero-day">SATURDAY</span>
-            </div>
-            <img
-              src={settings.mainPhoto}
-              alt="메인 사진 미리보기"
-              style={cropStyle(settings.mainCropZoom, settings.mainCropX, settings.mainCropY)}
-            />
-            <div className="hero-photo-gradient" />
-          </div>
-          <div className="hero-bottom" style={{ transform: `translateY(${settings.mainTextY}px)` }}>
-            <div className="hero-names" style={{ fontSize: settings.mainNameSize }}>{settings.mainNames}</div>
-            <div className="hero-detail" style={{ fontSize: settings.mainDetailSize }}>
-              <div>{settings.mainDateText}</div>
-              <div>{settings.mainLocationText}</div>
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="admin-crop-launch"
-          onClick={() => setCropEditor({
-            title: '메인 사진',
-            photo: settings.mainPhoto,
-            zoomKey: 'mainCropZoom',
-            xKey: 'mainCropX',
-            yKey: 'mainCropY',
-          })}
-        >
-          크롭 조정
-        </button>
-        <label className="admin-file">
-          <input type="file" accept={IMAGE_ACCEPT} onChange={(event) => uploadSingle(event, 'mainPhoto')} />
-          메인 사진 변경
-        </label>
-        <label>이름 문구 <input className="admin-input" value={settings.mainNames} onChange={(event) => update({ mainNames: event.target.value })} /></label>
-        <label>날짜 문구 <input className="admin-input" value={settings.mainDateText} onChange={(event) => update({ mainDateText: event.target.value })} /></label>
-        <label>장소 문구 <input className="admin-input" value={settings.mainLocationText} onChange={(event) => update({ mainLocationText: event.target.value })} /></label>
-        <label>이름 글자 크기 <input type="range" min="12" max="34" value={settings.mainNameSize} onChange={(event) => update({ mainNameSize: Number(event.target.value) })} /></label>
-        <label>날짜/장소 글자 크기 <input type="range" min="10" max="24" value={settings.mainDetailSize} onChange={(event) => update({ mainDetailSize: Number(event.target.value) })} /></label>
-        <label>문구 위치 <input type="range" min="-80" max="80" value={settings.mainTextY} onChange={(event) => update({ mainTextY: Number(event.target.value) })} /></label>
-        <button type="button" className="admin-section-save" onClick={() => saveSection('메인 사진')}>메인 사진 변경사항 저장</button>
-      </section>}
-
-      {activeSection === 'invitation' && <section className="admin-section">
-        <h3>초대글</h3>
-        <div className="admin-mini-preview admin-mini-photo admin-mobile-crop">
-          <img
-            src={settings.invitationPhoto}
-            alt="초대글 사진 미리보기"
-            style={cropStyle(settings.invitationCropZoom, settings.invitationCropX, settings.invitationCropY)}
-          />
-        </div>
-        <button
-          type="button"
-          className="admin-crop-launch"
-          onClick={() => setCropEditor({
-            title: '초대글 사진',
-            photo: settings.invitationPhoto,
-            zoomKey: 'invitationCropZoom',
-            xKey: 'invitationCropX',
-            yKey: 'invitationCropY',
-          })}
-        >
-          크롭 조정
-        </button>
-        <label className="admin-file">
-          <input type="file" accept={IMAGE_ACCEPT} onChange={(event) => uploadSingle(event, 'invitationPhoto')} />
-          초대글 사진 변경
-        </label>
-        <label>라벨 <input className="admin-input" value={settings.invitationLabel} onChange={(event) => update({ invitationLabel: event.target.value })} /></label>
-        <label>제목 <input className="admin-input" value={settings.invitationHeading} onChange={(event) => update({ invitationHeading: event.target.value })} /></label>
-        <label>초대글 본문 <textarea className="admin-input admin-textarea" value={settings.invitationBody} onChange={(event) => update({ invitationBody: event.target.value })} /></label>
-        <label>신랑 소개 <input className="admin-input" value={settings.invitationGroomLine} onChange={(event) => update({ invitationGroomLine: event.target.value })} /></label>
-        <label>신부 소개 <input className="admin-input" value={settings.invitationBrideLine} onChange={(event) => update({ invitationBrideLine: event.target.value })} /></label>
-        <button type="button" className="admin-section-save" onClick={() => saveSection('초대글')}>초대글 변경사항 저장</button>
-      </section>}
-
-      {activeSection === 'gallery' && <section className="admin-section">
-        <h3>갤러리</h3>
-        <label>라벨 <input className="admin-input" value={settings.galleryLabel} onChange={(event) => update({ galleryLabel: event.target.value })} /></label>
-        <label className="admin-file">
-          <input type="file" accept={IMAGE_ACCEPT} multiple onChange={addGalleryPhotos} />
-          갤러리 사진 추가
-        </label>
-        <div className="admin-gallery-preview" aria-label="갤러리 미리보기">
-          {settings.galleryPhotos.map((photo, index) => (
-            <img src={photo} alt={`갤러리 미리보기 ${index + 1}`} key={`${photo}-preview-${index}`} />
-          ))}
-        </div>
-        <div className="admin-gallery-sort" ref={galleryListRef}>
-          {galleryDropIndex === 0 && <div className="admin-gallery-drop-line" />}
-          {settings.galleryPhotos.map((photo, index) => (
-            <div key={`${photo.slice(0, 30)}-${index}`} data-gallery-index={index}>
-              <div
-                className={[
-                  'admin-gallery-row',
-                  draggingGalleryIndex === index ? 'admin-gallery-row-dragging' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <img src={photo} alt={`Gallery ${index + 1}`} />
-                <div className="admin-gallery-row-copy">
-                  <strong>{index + 1}번째 사진</strong>
-                  <span>오른쪽 핸들을 잡고 위아래로 이동</span>
-                </div>
-                <button
-                  type="button"
-                  className="admin-gallery-remove"
-                  aria-label={`갤러리 사진 ${index + 1} 삭제`}
-                  onClick={() => removeGalleryPhoto(index)}
-                >
-                  ×
-                </button>
-                <button
-                  type="button"
-                  className="admin-gallery-handle"
-                  aria-label={`갤러리 사진 ${index + 1} 순서 변경`}
-                  onPointerDown={(event) => {
-                    event.preventDefault()
-                    event.currentTarget.setPointerCapture(event.pointerId)
-                    galleryPointerDragRef.current = { index, pointerId: event.pointerId }
-                    galleryDropIndexRef.current = index
-                    setDraggingGalleryIndex(index)
-                    setGalleryDropIndex(index)
-                  }}
-                  onPointerMove={(event) => {
-                    const drag = galleryPointerDragRef.current
-                    if (!drag || drag.pointerId !== event.pointerId) return
-                    event.preventDefault()
-                    updateGalleryDropIndexAt(event.clientY)
-                  }}
-                  onPointerUp={(event) => {
-                    const drag = galleryPointerDragRef.current
-                    if (!drag || drag.pointerId !== event.pointerId) return
-                    event.preventDefault()
-                    finishGalleryPointerDrag()
-                  }}
-                  onPointerCancel={(event) => {
-                    const drag = galleryPointerDragRef.current
-                    if (!drag || drag.pointerId !== event.pointerId) return
-                    galleryPointerDragRef.current = null
-                    galleryDropIndexRef.current = null
-                    setDraggingGalleryIndex(null)
-                    setGalleryDropIndex(null)
-                  }}
-                >
-                  |||
-                </button>
-              </div>
-              {galleryDropIndex === index + 1 && <div className="admin-gallery-drop-line" />}
-            </div>
-          ))}
-        </div>
-        <button type="button" className="admin-section-save" onClick={() => saveSection('갤러리')}>갤러리 변경사항 저장</button>
-      </section>}
-      {activeSection === 'ending' && <section className="admin-section">
-        <h3>마지막 사진</h3>
-        <div className="admin-mini-preview admin-mini-ending admin-mobile-crop">
-          <img
-            src={settings.endingPhoto}
-            alt="마지막 사진 미리보기"
-            style={{
-              ...cropStyle(settings.endingCropZoom, settings.endingCropX, settings.endingCropY),
-            }}
-          />
-          <div className="admin-mini-ending-overlay" style={{ background: `rgba(0, 0, 0, ${settings.endingOverlayOpacity / 100})` }} />
-          <p
-            className={`ending-font-${settings.endingTextFont}`}
-            style={{
-              top: `${settings.endingTextTop}%`,
-              fontSize: Math.max(10, settings.endingTextSize * 0.72),
-            }}
-          >
-            {settings.endingText}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="admin-crop-launch"
-          onClick={() => setCropEditor({
-            title: '마지막 사진',
-            photo: settings.endingPhoto,
-            zoomKey: 'endingCropZoom',
-            xKey: 'endingCropX',
-            yKey: 'endingCropY',
-          })}
-        >
-          크롭 조정
-        </button>
-        <label className="admin-file">
-          <input type="file" accept={IMAGE_ACCEPT} onChange={(event) => uploadSingle(event, 'endingPhoto')} />
-          마지막 사진 변경
-        </label>
-        <label>텍스트 배경 어둡게 <input type="range" min="0" max="80" value={settings.endingOverlayOpacity} onChange={(event) => update({ endingOverlayOpacity: Number(event.target.value) })} /></label>
-        <label>문구 <input className="admin-input" value={settings.endingText} onChange={(event) => update({ endingText: event.target.value })} /></label>
-        <label>문구 크기 <input type="range" min="12" max="36" value={settings.endingTextSize} onChange={(event) => update({ endingTextSize: Number(event.target.value) })} /></label>
-        <label>문구 위치 <input type="range" min="10" max="90" value={settings.endingTextTop} onChange={(event) => update({ endingTextTop: Number(event.target.value) })} /></label>
-        <label>글꼴
-          <select className="admin-input" value={settings.endingTextFont} onChange={(event) => update({ endingTextFont: event.target.value })}>
-            <option value="serif">명조</option>
-            <option value="sans">고딕</option>
-            <option value="script">손글씨</option>
-          </select>
-        </label>
-        <button type="button" className="admin-section-save" onClick={() => saveSection('마지막 사진')}>마지막 사진 변경사항 저장</button>
-      </section>}
-      </aside>
-    </>
-  )
-}
-
 function App() {
-  const [settings, setSettings] = useState<WeddingSettings>(loadSettings)
+  const [settings, setSettings] = useState<WeddingSettings>(defaultSettings)
   const [cd, setCd] = useState({ d: 0, h: 0, m: 0, s: 0 })
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -709,22 +34,26 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, SETTINGS_DOC_PATH), (snapshot) => {
-      if (!snapshot.exists()) return
-      const remoteSettings = snapshot.data() as Partial<WeddingSettings>
-      setSettings({
-        ...defaultSettings,
-        ...remoteSettings,
-        galleryPhotos: remoteSettings.galleryPhotos?.length ? remoteSettings.galleryPhotos : defaultSettings.galleryPhotos,
+    const controller = new AbortController()
+    fetchSettings(controller.signal)
+      .then(setSettings)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        // The bundled defaults already render a complete invitation, so a failed fetch is not
+        // worth a toast on the guest page — it would alarm people over nothing.
+        console.warn('Falling back to bundled settings.', error)
       })
-    }, () => {
-      showToast('Firebase 설정을 불러오지 못했어요. 기본 사진으로 표시합니다.')
-    })
-    return unsubscribe
-  }, [showToast])
+    return () => controller.abort()
+  }, [])
 
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [musicPlaying, setMusicPlaying] = useState(!isAdminView)
+  // Driven by the element's own play/pause events. Mobile blocks autoplay, so starting
+  // this at `true` would pulse a "sound on" icon over a silent page.
+  const [musicPlaying, setMusicPlaying] = useState(false)
+  // A guest who taps mute has stated intent. The autoplay-unlock listener below runs on
+  // the same tap (it is on `document`, above React's root), and without this flag it
+  // would immediately restart the audio the guest just silenced.
+  const musicMutedByUser = useRef(false)
 
   const [rsvpOpen, setRsvpOpen] = useState(false)
   const [rsvpSubmitting, setRsvpSubmitting] = useState(false)
@@ -744,44 +73,61 @@ function App() {
       audioRef.current?.pause()
       return
     }
-    const tryPlay = () => {
-      const audio = audioRef.current
-      if (!audio) return
-      audio.play().then(() => {
-        setMusicPlaying(true)
-        document.removeEventListener('click', tryPlay)
-        document.removeEventListener('touchstart', tryPlay)
-        document.removeEventListener('scroll', tryPlay)
-      }).catch(() => {})
-    }
-    document.addEventListener('click', tryPlay, { once: false })
-    document.addEventListener('touchstart', tryPlay, { once: false })
-    document.addEventListener('scroll', tryPlay, { once: false })
-    tryPlay()
-    return () => {
+    const stopListening = () => {
       document.removeEventListener('click', tryPlay)
       document.removeEventListener('touchstart', tryPlay)
       document.removeEventListener('scroll', tryPlay)
     }
+    const tryPlay = () => {
+      const audio = audioRef.current
+      if (!audio || musicMutedByUser.current) return
+      audio.play().then(stopListening).catch(() => {})
+    }
+    document.addEventListener('click', tryPlay)
+    document.addEventListener('touchstart', tryPlay)
+    document.addEventListener('scroll', tryPlay)
+    tryPlay()
+    return stopListening
   }, [isAdminView])
 
   const toggleMusic = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
-    if (musicPlaying) {
-      audio.pause()
-      setMusicPlaying(false)
+    // Read the element, not React state: the unlock listener can change playback
+    // out from under us in the same tick.
+    if (audio.paused) {
+      musicMutedByUser.current = false
+      audio.play().catch(() => {})
     } else {
-      audio.play().then(() => setMusicPlaying(true)).catch(() => {})
+      musicMutedByUser.current = true
+      audio.pause()
     }
-  }, [musicPlaying])
+  }, [])
 
-  const copyAccount = useCallback((accountNumber: string) => {
-    navigator.clipboard.writeText(accountNumber).then(() => {
+  const copyAccount = useCallback(async (accountNumber: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(accountNumber)
+      } else {
+        // Older Android WebViews and some in-app browsers (KakaoTalk among them) leave
+        // navigator.clipboard undefined. Reading .writeText off it would throw
+        // synchronously, so no toast would ever fire and the tap would look dead.
+        const ta = document.createElement('textarea')
+        ta.value = accountNumber
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        ta.setSelectionRange(0, accountNumber.length)
+        const ok = document.execCommand('copy')
+        document.body.removeChild(ta)
+        if (!ok) throw new Error('execCommand copy failed')
+      }
       showToast('계좌번호가 복사되었습니다.')
-    }).catch(() => {
-      showToast('복사에 실패했습니다. 계좌번호를 직접 확인해 주세요.')
-    })
+    } catch {
+      showToast('복사에 실패했습니다. 계좌번호를 길게 눌러 복사해 주세요.')
+    }
   }, [showToast])
 
   useEffect(() => {
@@ -814,21 +160,29 @@ function App() {
     return () => obs.disconnect()
   }, [])
 
+  // `overflow: hidden` on body is a no-op on iOS Safari once the page is scrolled — the
+  // background keeps scrolling behind the lightbox and the RSVP sheet. Pinning the body
+  // with position:fixed is the technique that actually holds, but it resets scroll
+  // position, so we restore it on close.
+  const overlayOpen = lightbox !== null || rsvpOpen
   useEffect(() => {
-    if (lightbox !== null) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
+    if (!overlayOpen) return
+    const scrollY = window.scrollY
+    const body = document.body
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    return () => {
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+      window.scrollTo(0, scrollY)
     }
-  }, [lightbox])
-
-  useEffect(() => {
-    if (rsvpOpen) {
-      document.body.style.overflow = 'hidden'
-    } else if (lightbox === null) {
-      document.body.style.overflow = ''
-    }
-  }, [rsvpOpen, lightbox])
+  }, [overlayOpen])
 
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzu-ccO4ds4ZWwuuIivtUpb6Xvw7XJtWoa-9TJ1PJodnaM5Z97X2XmwrxKAN__F0Fbt/exec'
 
@@ -847,10 +201,18 @@ function App() {
     }
     setRsvpSubmitting(true)
     try {
-      await fetch(APPS_SCRIPT_URL, {
+      // A successful doPost answers 302 -> script.googleusercontent.com, and every hop carries
+      // Access-Control-Allow-Origin: *, so a plain cors request goes through and `ok` is real.
+      // When the script throws, Apps Script serves an HTML error page with no CORS header at
+      // all — the browser rejects the fetch and we land in the catch. Either way a guest is
+      // never told their RSVP arrived when it did not. (This used to be mode:'no-cors', where
+      // the opaque response made a 500 indistinguishable from success.)
+      //
+      // No Content-Type header is set on purpose: anything beyond the safelisted values
+      // triggers a preflight, and Apps Script does not answer OPTIONS. The body travels as
+      // text/plain and the script parses it with JSON.parse(e.postData.contents).
+      const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           attendance: rsvpData.attendance,
           side: rsvpData.side,
@@ -863,6 +225,7 @@ function App() {
           timestamp: new Date().toISOString(),
         }),
       })
+      if (!response.ok) throw new Error(`RSVP endpoint responded ${response.status}`)
       showToast('참석 여부가 전달되었습니다. 감사합니다.')
       setRsvpOpen(false)
     } catch {
@@ -882,12 +245,57 @@ function App() {
     setLightbox((prev) => (prev !== null && galleryPhotos.length ? (prev + 1) % galleryPhotos.length : null))
   }, [galleryPhotos.length])
 
+  // The lightbox arrows are ~40px targets at the very edge of a phone screen, right where the
+  // thumb rests. A swipe is how anyone will actually try to change photos.
+  const swipeStart = useRef<{ x: number, y: number } | null>(null)
+  const onLightboxTouchStart = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0]
+    swipeStart.current = { x: touch.clientX, y: touch.clientY }
+  }, [])
+  const onLightboxTouchEnd = useCallback((event: React.TouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (!start) return
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    // Ignore mostly-vertical drags so a scroll-ish gesture does not flip the photo.
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy)) return
+    if (dx < 0) nextSlide()
+    else prevSlide()
+  }, [nextSlide, prevSlide])
+
+  useEffect(() => {
+    if (activeLightbox === null) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeLightbox()
+      else if (event.key === 'ArrowLeft') prevSlide()
+      else if (event.key === 'ArrowRight') nextSlide()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeLightbox, closeLightbox, prevSlide, nextSlide])
+
   return (
     <div className={`app-root ${isAdminView ? 'app-root-admin' : ''}`}>
       {isAdminView && (
-        <AdminPanel settings={settings} setSettings={setSettings} showToast={showToast} />
+        <Suspense fallback={<aside className="admin-panel admin-login" id="admin-editor"><h2>불러오는 중…</h2></aside>}>
+          <AdminPanel settings={settings} setSettings={setSettings} showToast={showToast} />
+        </Suspense>
       )}
-      <audio ref={audioRef} src={bgMusic} loop preload="auto" />
+      {/* Two sources, one download: the browser picks the first it can play. AAC-LC at 64 kbps
+          mono beats MP3 at the same bitrate and every mobile browser supports it, but the MP3
+          stays as a fallback so nothing can leave a guest with a silent page. */}
+      <audio
+        ref={audioRef}
+        loop
+        preload="none"
+        onPlay={() => setMusicPlaying(true)}
+        onPause={() => setMusicPlaying(false)}
+      >
+        <source src={bgMusicAac} type="audio/mp4" />
+        <source src={bgMusicMp3} type="audio/mpeg" />
+      </audio>
       <div className={isAdminView ? 'admin-preview-shell' : undefined} id="admin-preview">
         {isAdminView && <div className="admin-preview-label">모바일 미리보기</div>}
         <main className="invitation">
@@ -922,9 +330,13 @@ function App() {
               <span className="hero-date-full">2026 / 10 / 24</span>
               <span className="hero-day">SATURDAY</span>
             </div>
+            {/* The only image above the fold, and it is discovered late because React renders it.
+                fetchPriority tells the browser not to queue it behind the rest. */}
             <img
               src={settings.mainPhoto}
               alt="성현과 예은"
+              fetchPriority="high"
+              decoding="async"
               style={cropStyle(settings.mainCropZoom, settings.mainCropX, settings.mainCropY)}
             />
             <div className="hero-photo-gradient" />
@@ -957,6 +369,8 @@ function App() {
             <img
               src={settings.invitationPhoto}
               alt="성현과 예은"
+              loading="lazy"
+              decoding="async"
               style={cropStyle(settings.invitationCropZoom, settings.invitationCropX, settings.invitationCropY)}
             />
           </div>
@@ -1057,7 +471,7 @@ function App() {
                 aria-label={`사진 ${i + 1}`}
                 onClick={() => setLightbox(i)}
               >
-                <img src={src} alt={`사진 ${i + 1}`} />
+                <img src={src} alt={`사진 ${i + 1}`} loading="lazy" decoding="async" />
               </button>
             ))}
           </div>
@@ -1075,21 +489,39 @@ function App() {
             부산 센텀호텔 4F 벨라홀
           </div>
           <div className="map-img-wrap fade-up">
-            <img src={mapImage} alt="센텀호텔 약도" />
+            <img src={mapImage} alt="센텀호텔 약도" loading="lazy" decoding="async" />
           </div>
+          {/* Anchors, not window.open: in-app browsers (KakaoTalk especially) block or trap
+              programmatic window.open in a nested WebView with no way back. A real link also
+              hands the guest a long-press menu and lets the OS hand off to the installed app. */}
           <div className="map-buttons fade-up">
-            <button type="button" className="map-btn map-btn-naver" onClick={() => window.open('https://map.naver.com/p/search/%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80', '_blank')}>
-              <img className="map-app-icon" src={naverMapLogo} alt="네이버 지도 로고" />
+            <a
+              className="map-btn map-btn-naver"
+              href="https://map.naver.com/p/search/%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img className="map-app-icon" src={naverMapLogo} alt="네이버 지도 로고" loading="lazy" decoding="async" />
               <span>네이버 지도</span>
-            </button>
-            <button type="button" className="map-btn map-btn-kakao" onClick={() => window.open('https://map.kakao.com/?q=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80', '_blank')}>
-              <img className="map-app-icon" src={kakaoMapLogo} alt="카카오맵 로고" />
+            </a>
+            <a
+              className="map-btn map-btn-kakao"
+              href="https://map.kakao.com/?q=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img className="map-app-icon" src={kakaoMapLogo} alt="카카오맵 로고" loading="lazy" decoding="async" />
               <span>카카오맵</span>
-            </button>
-            <button type="button" className="map-btn map-btn-tmap" onClick={() => window.open('https://map.tmap.co.kr/search?query=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80', '_blank')}>
-              <img className="map-app-icon" src={tmapLogo} alt="티맵 로고" />
+            </a>
+            <a
+              className="map-btn map-btn-tmap"
+              href="https://map.tmap.co.kr/search?query=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img className="map-app-icon" src={tmapLogo} alt="티맵 로고" loading="lazy" decoding="async" />
               <span>티맵</span>
-            </button>
+            </a>
           </div>
         </section>
 
@@ -1140,9 +572,9 @@ function App() {
                     <span className="acct-name">박성현</span>
                   </div>
                   <div className="acct-detail">
-                    <span className="acct-bank">은행명</span>
-                    <span className="acct-number">0000-00-0000000</span>
-                    <button type="button" className="copy-btn" onClick={() => copyAccount('0000-00-0000000')}>복사</button>
+                    <span className="acct-bank">국민은행</span>
+                    <span className="acct-number">433401-01-469146</span>
+                    <button type="button" className="copy-btn" onClick={() => copyAccount('433401-01-469146')}>복사</button>
                   </div>
                 </div>
                 <div className="acct-row">
@@ -1174,7 +606,7 @@ function App() {
                     <span className="acct-name">배예은</span>
                   </div>
                   <div className="acct-detail">
-                    <span className="acct-bank">은행명</span>
+                    <span className="acct-bank">토스뱅크</span>
                     <span className="acct-number">0000-00-0000000</span>
                     <button type="button" className="copy-btn" onClick={() => copyAccount('0000-00-0000000')}>복사</button>
                   </div>
@@ -1217,6 +649,8 @@ function App() {
           <img
             src={settings.endingPhoto}
             alt="성현과 예은"
+            loading="lazy"
+            decoding="async"
             style={cropStyle(settings.endingCropZoom, settings.endingCropX, settings.endingCropY)}
           />
           <div className="ending-overlay" style={{ background: `rgba(0, 0, 0, ${settings.endingOverlayOpacity / 100})` }} />
@@ -1253,13 +687,83 @@ function App() {
             <div className="gb-modal-body rsvp-body-modal">
               <ul className="gb-form">
                 <li>
+                  <p className="gb-form-label">참석 여부<span className="rsvp-req">필수</span></p>
+                  <div className="rsvp-toggle">
+                    {(['참석', '불참'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        className={`rsvp-opt ${rsvpData.attendance === opt ? 'rsvp-opt-on' : ''}`}
+                        onClick={() => setRsvpData((d) => (
+                          opt === '불참'
+                            // A decline carries no headcount: clear the fields we are about to hide,
+                            // or their stale values would still be submitted.
+                            ? { ...d, attendance: opt, extraGuests: 0, companionNames: '', meal: '해당없음' }
+                            : { ...d, attendance: opt, meal: '예정' }
+                        ))}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+                <li>
+                  <p className="gb-form-label">구분<span className="rsvp-req">필수</span></p>
+                  <div className="rsvp-toggle">
+                    {(['신랑측', '신부측'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        className={`rsvp-opt ${rsvpData.side === opt ? 'rsvp-opt-on' : ''}`}
+                        onClick={() => setRsvpData((d) => ({ ...d, side: opt }))}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+                <li>
                   <p className="gb-form-label">성함<span className="rsvp-req">필수</span></p>
                   <input type="text" className="gb-input" placeholder="성함 입력" value={rsvpData.name} onChange={(e) => setRsvpData((d) => ({ ...d, name: e.target.value }))} />
                 </li>
                 <li>
                   <p className="gb-form-label">연락처</p>
-                  <input type="text" className="gb-input" placeholder="연락처 입력" value={rsvpData.phone} onChange={(e) => setRsvpData((d) => ({ ...d, phone: e.target.value.replace(/[^0-9-]/g, '') }))} />
+                  <input type="tel" inputMode="tel" className="gb-input" placeholder="연락처 입력" value={rsvpData.phone} onChange={(e) => setRsvpData((d) => ({ ...d, phone: e.target.value.replace(/[^0-9-]/g, '') }))} />
                 </li>
+                {rsvpData.attendance === '참석' && (
+                  <>
+                    <li>
+                      <p className="gb-form-label">본인 포함 참석 인원</p>
+                      <select
+                        className="gb-input rsvp-select"
+                        value={rsvpData.extraGuests}
+                        onChange={(e) => setRsvpData((d) => ({ ...d, extraGuests: Number(e.target.value) }))}
+                      >
+                        {[0, 1, 2, 3, 4, 5].map((n) => (
+                          <option key={n} value={n}>{n === 0 ? '본인만 참석' : `본인 외 ${n}명`}</option>
+                        ))}
+                      </select>
+                    </li>
+                    {rsvpData.extraGuests > 0 && (
+                      <li>
+                        <p className="gb-form-label">동반 인원 성함</p>
+                        <input type="text" className="gb-input" placeholder="예) 홍길동, 김영희" value={rsvpData.companionNames} onChange={(e) => setRsvpData((d) => ({ ...d, companionNames: e.target.value }))} />
+                      </li>
+                    )}
+                    <li>
+                      <p className="gb-form-label">식사 여부</p>
+                      <select
+                        className="gb-input rsvp-select"
+                        value={rsvpData.meal}
+                        onChange={(e) => setRsvpData((d) => ({ ...d, meal: e.target.value }))}
+                      >
+                        {['예정', '안함', '미정'].map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </li>
+                  </>
+                )}
                 <li>
                   <p className="gb-form-label">전달사항</p>
                   <input type="text" className="gb-input" maxLength={25} placeholder="최대 25자" value={rsvpData.message} onChange={(e) => setRsvpData((d) => ({ ...d, message: e.target.value }))} />
@@ -1276,14 +780,19 @@ function App() {
       {activeLightbox !== null && (
         <div className="lightbox-overlay" onClick={closeLightbox}>
           <button type="button" className="lb-close" onClick={closeLightbox}>&times;</button>
-          <div className="lb-main" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="lb-arrow lb-prev" onClick={prevSlide}>&lsaquo;</button>
+          <div
+            className="lb-main"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={onLightboxTouchStart}
+            onTouchEnd={onLightboxTouchEnd}
+          >
+            <button type="button" className="lb-arrow lb-prev" onClick={prevSlide} aria-label="이전 사진">&lsaquo;</button>
             <img
               className="lb-image"
               src={galleryPhotos[activeLightbox]}
               alt={`사진 ${activeLightbox + 1}`}
             />
-            <button type="button" className="lb-arrow lb-next" onClick={nextSlide}>&rsaquo;</button>
+            <button type="button" className="lb-arrow lb-next" onClick={nextSlide} aria-label="다음 사진">&rsaquo;</button>
           </div>
           <div className="lb-thumbs" onClick={(e) => e.stopPropagation()}>
             {galleryPhotos.map((src, i) => (
@@ -1293,7 +802,7 @@ function App() {
                 className={`lb-thumb ${i === activeLightbox ? 'lb-thumb-active' : ''}`}
                 onClick={() => setLightbox(i)}
               >
-                <img src={src} alt={`썸네일 ${i + 1}`} />
+                <img src={src} alt={`썸네일 ${i + 1}`} loading="lazy" decoding="async" />
               </button>
             ))}
           </div>

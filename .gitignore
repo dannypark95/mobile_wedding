@@ -28,3 +28,13 @@ vite-local.pid
 *-firebase-adminsdk-*.json
 .env
 .env.local
+
+# Never publish personal documents or binaries dropped into asset folders
+*.pdf
+*.exe
+*.zip
+*.HEIC
+img/**/화면 캡처*
+
+# Full-resolution photo originals (kept locally, not shipped to guests)
+img-originals/

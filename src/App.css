@@ -1,14 +1,19 @@
 /* ── Vars ── */
 :root {
   --c-main: rgba(102, 100, 100, 1);
-  --c-main70: rgba(102, 100, 100, 0.7);
+  /* 0.7 alpha computed to 3.0:1 against white — below the 4.5:1 WCAG AA floor, on 11-13px
+     labels, for an audience that skews elderly. 0.9 lands at ~4.9:1. --c-main40 (1.8:1) is
+     kept only for borders and hairlines; never use it for text. */
+  --c-main70: rgba(102, 100, 100, 0.9);
   --c-main40: rgba(102, 100, 100, 0.4);
   --c-main03: rgba(102, 100, 100, 0.03);
   --c-black: #000;
   --c-black70: rgba(0, 0, 0, 0.7);
   --c-white: #fff;
   --ff: 'NanumMyeongjo', 'Nanum Myeongjo', serif;
-  --ff-body: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* Pretendard was never actually loaded, so every UI string silently fell through to the
+     system font anyway. Name the Korean system faces explicitly instead of pretending. */
+  --ff-body: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
 }
 
 /* ── Layout ── */
@@ -1350,6 +1355,10 @@
 .map-img-wrap img {
   width: 100%;
   display: block;
+  /* Reserve the box before the image lands, or it pops in and shoves the map buttons
+     down just as the guest is reaching for them. */
+  aspect-ratio: 1554 / 1072;
+  object-fit: cover;
 }
 .map-buttons {
   display: grid;
@@ -1369,6 +1378,7 @@
   color: var(--c-black70);
   cursor: pointer;
   text-align: center;
+  text-decoration: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1867,7 +1877,10 @@
   font-family: var(--ff-body);
 }
 .ending-font-script {
-  font-family: 'Brush Script MT', 'Segoe Script', cursive;
+  /* Brush Script MT / Segoe Script are desktop-Windows faces with no Hangul coverage — on a
+     phone the 손글씨 option silently rendered as the default serif. Nanum Pen Script is a
+     Korean handwriting face; its webfont only downloads if this class is actually used. */
+  font-family: 'Nanum Pen Script', cursive;
 }
 
 /* ── Footer ── */
@@ -1875,7 +1888,7 @@
   text-align: center;
   padding: 40px 20px 50px;
   font-size: 12px;
-  color: var(--c-main40);
+  color: var(--c-main70);
   font-family: var(--ff-body);
 }
 .footer-heart {

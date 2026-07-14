@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap');
+/* Nanum Myeongjo is loaded from index.html — an @import here would serialize the
+   font request behind downloading and parsing this stylesheet. */
 
 *,
 *::before,
