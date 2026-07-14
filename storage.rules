@@ -1,10 +1,14 @@
 rules_version = '2';
 
+// Same exposure as firestore.rules: `request.auth != null` let anyone who signed themselves up
+// upload into the bucket the invitation reads from. Guests still read (the photos are public);
+// only the admin account writes.
 service firebase.storage {
   match /b/{bucket}/o {
     match /wedding/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.token.email == 'admin@mobile-wedding.local';
     }
   }
 }

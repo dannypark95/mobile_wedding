@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef, type ChangeEvent, type Dispatch, type PointerEvent, type SetStateAction } from 'react'
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { useState, useEffect, useCallback, useRef, type ChangeEvent, type Dispatch, type PointerEvent, type SetStateAction } from 'react'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 
@@ -184,7 +184,13 @@ export default function AdminPanel({
 }) {
   const [adminId, setAdminId] = useState(ADMIN_ID)
   const [password, setPassword] = useState('')
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem('mobileWeddingAdminAuthed') === '1')
+  // Firebase is the only thing that actually knows whether we can write. A sessionStorage flag
+  // used to stand in for it, which drifts: the token expires or is cleared and the panel still
+  // renders the full editor, so every save fails with a generic "저장에 실패했어요" and no hint
+  // that the real problem is a lost session. Ask Firebase and follow it.
+  const [authed, setAuthed] = useState(() => auth.currentUser !== null)
+
+  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(user !== null)), [])
   const [draggingGalleryIndex, setDraggingGalleryIndex] = useState<number | null>(null)
   const [galleryDropIndex, setGalleryDropIndex] = useState<number | null>(null)
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null)
@@ -318,8 +324,7 @@ export default function AdminPanel({
               }
               try {
                 await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password)
-                sessionStorage.setItem('mobileWeddingAdminAuthed', '1')
-                setAuthed(true)
+                // onAuthStateChanged flips `authed`; setting it here too would race it.
                 showToast('관리자 모드로 들어왔어요. 음악은 자동으로 꺼져 있어요.')
               } catch {
                 showToast('아이디 또는 비밀번호가 맞지 않습니다.')
@@ -358,8 +363,6 @@ export default function AdminPanel({
           className="admin-ghost"
           onClick={async () => {
             await signOut(auth)
-            sessionStorage.removeItem('mobileWeddingAdminAuthed')
-            setAuthed(false)
             setPassword('')
             showToast('로그아웃했어요.')
           }}

@@ -1,10 +1,23 @@
 rules_version = '2';
 
+// `request.auth != null` used to be the write condition here. It reads like "only the admin",
+// but it actually means "anyone holding any account on this Firebase project" — and email/password
+// self-signup is open, so a stranger can mint an account with the API key that ships in the JS
+// bundle and then rewrite the invitation. Pin writes to the one account that should have them.
+//
+// Nobody else can claim this address: signing up with an email that already exists fails with
+// EMAIL_EXISTS, so the check holds even while self-signup is enabled. Disable signup in the
+// Firebase console anyway (Authentication -> Settings -> User actions -> uncheck sign-up) so this
+// rule is a second line of defence rather than the only one.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@mobile-wedding.local';
+    }
+
     match /wedding/settings {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
   }
 }
