@@ -62,9 +62,10 @@ function App() {
     side: '신랑측',
     name: '',
     phone: '',
-    // 본인 포함 headcount, held as a digit-only string so the field can be cleared while
-    // typing. The sheet still receives `extraGuests` (본인 외), derived on submit.
-    attendeeCount: '1',
+    // 본인 외 headcount — the same thing the sheet's extraGuests column has always meant, so
+    // it goes across untranslated. Held as a digit-only string so the field can be cleared
+    // while typing; an empty field submits as 0.
+    extraGuests: '0',
     companionNames: '',
     meal: '예정',
     message: '',
@@ -191,7 +192,7 @@ function App() {
   const openRsvp = useCallback(() => {
     setRsvpData({
       attendance: '참석', side: '신랑측', name: '', phone: '',
-      attendeeCount: '1', companionNames: '', meal: '예정', message: '',
+      extraGuests: '0', companionNames: '', meal: '예정', message: '',
     })
     setRsvpOpen(true)
   }, [])
@@ -202,13 +203,9 @@ function App() {
       return
     }
     const attending = rsvpData.attendance === '참석'
-    const attendeeCount = Number(rsvpData.attendeeCount)
-    if (attending && (!attendeeCount || attendeeCount < 1)) {
-      showToast('참석 인원을 1명 이상으로 입력해 주세요.')
-      return
-    }
-    // The sheet's column is 본인 외 인원; the field the guest fills in is 본인 포함.
-    const extraGuests = attending ? attendeeCount - 1 : 0
+    // 본인 외, so 0 is both the default and a perfectly valid answer — nothing to validate.
+    // An empty field means the guest cleared it and is coming alone.
+    const extraGuests = attending ? Number(rsvpData.extraGuests || 0) : 0
     setRsvpSubmitting(true)
     try {
       // A successful doPost answers 302 -> script.googleusercontent.com, and every hop carries
@@ -708,7 +705,7 @@ function App() {
                           opt === '불참'
                             // A decline carries no headcount: clear the fields we are about to hide,
                             // or their stale values would still be submitted.
-                            ? { ...d, attendance: opt, attendeeCount: '1', companionNames: '', meal: '해당없음' }
+                            ? { ...d, attendance: opt, extraGuests: '0', companionNames: '', meal: '해당없음' }
                             : { ...d, attendance: opt, meal: '예정' }
                         ))}
                       >
@@ -743,7 +740,7 @@ function App() {
                 {rsvpData.attendance === '참석' && (
                   <>
                     <li>
-                      <p className="gb-form-label">본인 포함 참석 인원</p>
+                      <p className="gb-form-label">본인 외 참석 인원</p>
                       {/* type="text" + inputMode="numeric", not type="number": a number input still
                           accepts 'e', '+' and '-', shows spinners nobody taps on a phone, and reports
                           an empty string for junk input so it cannot be filtered. This gets the numeric
@@ -753,12 +750,12 @@ function App() {
                         inputMode="numeric"
                         maxLength={2}
                         className="gb-input"
-                        placeholder="예) 2"
-                        value={rsvpData.attendeeCount}
-                        onChange={(e) => setRsvpData((d) => ({ ...d, attendeeCount: e.target.value.replace(/[^0-9]/g, '') }))}
+                        placeholder="혼자 참석하시면 0"
+                        value={rsvpData.extraGuests}
+                        onChange={(e) => setRsvpData((d) => ({ ...d, extraGuests: e.target.value.replace(/[^0-9]/g, '') }))}
                       />
                     </li>
-                    {Number(rsvpData.attendeeCount) > 1 && (
+                    {Number(rsvpData.extraGuests) > 0 && (
                       <li>
                         <p className="gb-form-label">동반 인원 성함</p>
                         <input type="text" className="gb-input" placeholder="예) 홍길동, 김영희" value={rsvpData.companionNames} onChange={(e) => setRsvpData((d) => ({ ...d, companionNames: e.target.value }))} />
