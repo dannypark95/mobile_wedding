@@ -62,7 +62,9 @@ function App() {
     side: '신랑측',
     name: '',
     phone: '',
-    extraGuests: 0,
+    // 본인 포함 headcount, held as a digit-only string so the field can be cleared while
+    // typing. The sheet still receives `extraGuests` (본인 외), derived on submit.
+    attendeeCount: '1',
     companionNames: '',
     meal: '예정',
     message: '',
@@ -189,7 +191,7 @@ function App() {
   const openRsvp = useCallback(() => {
     setRsvpData({
       attendance: '참석', side: '신랑측', name: '', phone: '',
-      extraGuests: 0, companionNames: '', meal: '예정', message: '',
+      attendeeCount: '1', companionNames: '', meal: '예정', message: '',
     })
     setRsvpOpen(true)
   }, [])
@@ -199,6 +201,14 @@ function App() {
       showToast('성함을 입력해 주세요.')
       return
     }
+    const attending = rsvpData.attendance === '참석'
+    const attendeeCount = Number(rsvpData.attendeeCount)
+    if (attending && (!attendeeCount || attendeeCount < 1)) {
+      showToast('참석 인원을 1명 이상으로 입력해 주세요.')
+      return
+    }
+    // The sheet's column is 본인 외 인원; the field the guest fills in is 본인 포함.
+    const extraGuests = attending ? attendeeCount - 1 : 0
     setRsvpSubmitting(true)
     try {
       // A successful doPost answers 302 -> script.googleusercontent.com, and every hop carries
@@ -218,7 +228,7 @@ function App() {
           side: rsvpData.side,
           name: rsvpData.name.trim(),
           phone: rsvpData.phone.trim(),
-          extraGuests: rsvpData.extraGuests,
+          extraGuests,
           companionNames: rsvpData.companionNames.trim(),
           meal: rsvpData.meal,
           message: rsvpData.message.trim(),
@@ -698,7 +708,7 @@ function App() {
                           opt === '불참'
                             // A decline carries no headcount: clear the fields we are about to hide,
                             // or their stale values would still be submitted.
-                            ? { ...d, attendance: opt, extraGuests: 0, companionNames: '', meal: '해당없음' }
+                            ? { ...d, attendance: opt, attendeeCount: '1', companionNames: '', meal: '해당없음' }
                             : { ...d, attendance: opt, meal: '예정' }
                         ))}
                       >
@@ -734,17 +744,21 @@ function App() {
                   <>
                     <li>
                       <p className="gb-form-label">본인 포함 참석 인원</p>
-                      <select
-                        className="gb-input rsvp-select"
-                        value={rsvpData.extraGuests}
-                        onChange={(e) => setRsvpData((d) => ({ ...d, extraGuests: Number(e.target.value) }))}
-                      >
-                        {[0, 1, 2, 3, 4, 5].map((n) => (
-                          <option key={n} value={n}>{n === 0 ? '본인만 참석' : `본인 외 ${n}명`}</option>
-                        ))}
-                      </select>
+                      {/* type="text" + inputMode="numeric", not type="number": a number input still
+                          accepts 'e', '+' and '-', shows spinners nobody taps on a phone, and reports
+                          an empty string for junk input so it cannot be filtered. This gets the numeric
+                          keypad on mobile while letting us strip anything that is not a digit. */}
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={2}
+                        className="gb-input"
+                        placeholder="예) 2"
+                        value={rsvpData.attendeeCount}
+                        onChange={(e) => setRsvpData((d) => ({ ...d, attendeeCount: e.target.value.replace(/[^0-9]/g, '') }))}
+                      />
                     </li>
-                    {rsvpData.extraGuests > 0 && (
+                    {Number(rsvpData.attendeeCount) > 1 && (
                       <li>
                         <p className="gb-form-label">동반 인원 성함</p>
                         <input type="text" className="gb-input" placeholder="예) 홍길동, 김영희" value={rsvpData.companionNames} onChange={(e) => setRsvpData((d) => ({ ...d, companionNames: e.target.value }))} />
