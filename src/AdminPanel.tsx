@@ -6,8 +6,11 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { auth, db, storage } from './firebase'
 import {
   cropStyle,
+  preloadImage,
   settingsForSave,
   SETTINGS_DOC_PATH,
+  type AccountEntry,
+  type InfoBlock,
   type NumericSettingKey,
   type WeddingSettings,
 } from './settings'
@@ -24,7 +27,74 @@ type CropEditorState = {
   yKey: NumericSettingKey
 }
 
-type AdminSectionKey = 'main' | 'invitation' | 'gallery' | 'ending'
+type AdminSectionKey = 'main' | 'invitation' | 'gallery' | 'location' | 'thanks' | 'ending'
+
+const SECTION_TABS: { key: AdminSectionKey, label: string }[] = [
+  { key: 'main', label: '메인' },
+  { key: 'invitation', label: '초대글' },
+  { key: 'gallery', label: '갤러리' },
+  { key: 'location', label: '오시는 길' },
+  { key: 'thanks', label: '계좌번호' },
+  { key: 'ending', label: '마지막' },
+]
+
+const EMPTY_ACCOUNT: AccountEntry = { role: '', name: '', bank: '', number: '' }
+const EMPTY_INFO_BLOCK: InfoBlock = { title: '', body: '' }
+
+/**
+ * The 계좌번호 rows for one side of the family. Both sides are the same editor, so it takes the
+ * list and hands back the next one rather than reaching into settings itself.
+ */
+function AccountListEditor({
+  side,
+  accounts,
+  onChange,
+}: {
+  side: string
+  accounts: AccountEntry[]
+  onChange: (next: AccountEntry[]) => void
+}) {
+  const patch = (index: number, field: keyof AccountEntry, value: string) => {
+    onChange(accounts.map((account, i) => (i === index ? { ...account, [field]: value } : account)))
+  }
+
+  return (
+    <div className="admin-cards">
+      {accounts.map((account, index) => (
+        <div className="admin-card" key={index}>
+          <div className="admin-card-head">
+            <strong>{side} 계좌 {index + 1}</strong>
+            <button
+              type="button"
+              className="admin-card-remove"
+              onClick={() => {
+                if (!window.confirm(`${side} 계좌 ${index + 1}번을 삭제할까요?`)) return
+                onChange(accounts.filter((_, i) => i !== index))
+              }}
+            >
+              삭제
+            </button>
+          </div>
+          <label>구분 (예: 신랑, 혼주)
+            <input className="admin-input" value={account.role} onChange={(event) => patch(index, 'role', event.target.value)} />
+          </label>
+          <label>예금주
+            <input className="admin-input" value={account.name} onChange={(event) => patch(index, 'name', event.target.value)} />
+          </label>
+          <label>은행
+            <input className="admin-input" value={account.bank} onChange={(event) => patch(index, 'bank', event.target.value)} />
+          </label>
+          <label>계좌번호
+            <input className="admin-input" inputMode="numeric" value={account.number} onChange={(event) => patch(index, 'number', event.target.value)} />
+          </label>
+        </div>
+      ))}
+      <button type="button" className="admin-secondary" onClick={() => onChange([...accounts, { ...EMPTY_ACCOUNT }])}>
+        + {side} 계좌 추가
+      </button>
+    </div>
+  )
+}
 
 function isHeicFile(file: File) {
   return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name)
@@ -81,7 +151,13 @@ async function uploadImageFile(file: File, folder: string) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')
   const imageRef = ref(storage, `wedding/${folder}/${Date.now()}-${safeName}`)
   await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' })
-  return getDownloadURL(imageRef)
+  const url = await getDownloadURL(imageRef)
+  // Pull the uploaded copy down before anything renders it. Pointing an <img> at a URL the
+  // browser has never fetched empties the slot until the download lands, which reads as the
+  // preview flickering every time a photo is replaced. This wait is invisible next to the
+  // upload that just happened.
+  await preloadImage(url)
+  return url
 }
 
 function clampPercent(value: number) {
@@ -371,10 +447,16 @@ export default function AdminPanel({
         </button>
       </div>
       <div className="admin-section-tabs" aria-label="편집 섹션 선택">
-        <button type="button" className={activeSection === 'main' ? 'is-active' : ''} onClick={() => setActiveSection('main')}>메인</button>
-        <button type="button" className={activeSection === 'invitation' ? 'is-active' : ''} onClick={() => setActiveSection('invitation')}>초대글</button>
-        <button type="button" className={activeSection === 'gallery' ? 'is-active' : ''} onClick={() => setActiveSection('gallery')}>갤러리</button>
-        <button type="button" className={activeSection === 'ending' ? 'is-active' : ''} onClick={() => setActiveSection('ending')}>마지막</button>
+        {SECTION_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={activeSection === tab.key ? 'is-active' : ''}
+            onClick={() => setActiveSection(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       <p className="admin-helper">
         각 섹션에서 수정한 뒤 해당 섹션의 저장 버튼을 눌러주세요. 저장 전에는 현재 화면의 미리보기에서만 확인됩니다.
@@ -539,6 +621,96 @@ export default function AdminPanel({
           ))}
         </div>
         <button type="button" className="admin-section-save" onClick={() => saveSection('갤러리')}>갤러리 변경사항 저장</button>
+      </section>}
+
+      {activeSection === 'location' && <section className="admin-section">
+        <h3>오시는 길</h3>
+        <label>라벨 <input className="admin-input" value={settings.locationLabel} onChange={(event) => update({ locationLabel: event.target.value })} /></label>
+        <label>제목 <input className="admin-input" value={settings.locationHeading} onChange={(event) => update({ locationHeading: event.target.value })} /></label>
+        <label>주소 (줄바꿈으로 두 줄까지)
+          <textarea className="admin-input admin-textarea admin-textarea-short" value={settings.locationAddress} onChange={(event) => update({ locationAddress: event.target.value })} />
+        </label>
+        <label>지도 검색어
+          <input className="admin-input" value={settings.locationQuery} onChange={(event) => update({ locationQuery: event.target.value })} />
+        </label>
+        <p className="admin-note">네이버 지도 · 카카오맵 · 티맵 버튼이 이 검색어로 연결됩니다. 약도 이미지는 코드에 포함된 파일이라 여기서는 바꿀 수 없어요.</p>
+
+        <h3>오시는 길 안내</h3>
+        <label>라벨 <input className="admin-input" value={settings.infoLabel} onChange={(event) => update({ infoLabel: event.target.value })} /></label>
+        <label>제목 <input className="admin-input" value={settings.infoHeading} onChange={(event) => update({ infoHeading: event.target.value })} /></label>
+        <div className="admin-cards">
+          {settings.infoBlocks.map((block, index) => (
+            <div className="admin-card" key={index}>
+              <div className="admin-card-head">
+                <strong>안내 {index + 1}</strong>
+                <button
+                  type="button"
+                  className="admin-card-remove"
+                  onClick={() => {
+                    if (!window.confirm(`안내 ${index + 1}번을 삭제할까요?`)) return
+                    update({ infoBlocks: settings.infoBlocks.filter((_, i) => i !== index) })
+                  }}
+                >
+                  삭제
+                </button>
+              </div>
+              <label>소제목 (예: 대중교통)
+                <input
+                  className="admin-input"
+                  value={block.title}
+                  onChange={(event) => update({
+                    infoBlocks: settings.infoBlocks.map((row, i) => (i === index ? { ...row, title: event.target.value } : row)),
+                  })}
+                />
+              </label>
+              <label>내용
+                <textarea
+                  className="admin-input admin-textarea admin-textarea-short"
+                  value={block.body}
+                  onChange={(event) => update({
+                    infoBlocks: settings.infoBlocks.map((row, i) => (i === index ? { ...row, body: event.target.value } : row)),
+                  })}
+                />
+              </label>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="admin-secondary"
+            onClick={() => update({ infoBlocks: [...settings.infoBlocks, { ...EMPTY_INFO_BLOCK }] })}
+          >
+            + 안내 추가
+          </button>
+        </div>
+        <button type="button" className="admin-section-save" onClick={() => saveSection('오시는 길')}>오시는 길 변경사항 저장</button>
+      </section>}
+
+      {activeSection === 'thanks' && <section className="admin-section">
+        <h3>마음 전하실 곳</h3>
+        <label>라벨 <input className="admin-input" value={settings.thanksLabel} onChange={(event) => update({ thanksLabel: event.target.value })} /></label>
+        <label>제목 <input className="admin-input" value={settings.thanksHeading} onChange={(event) => update({ thanksHeading: event.target.value })} /></label>
+        <label>안내 문구
+          <textarea className="admin-input admin-textarea admin-textarea-short" value={settings.thanksBody} onChange={(event) => update({ thanksBody: event.target.value })} />
+        </label>
+
+        <h3>신랑측 계좌번호</h3>
+        <label>버튼 문구 <input className="admin-input" value={settings.groomAccountLabel} onChange={(event) => update({ groomAccountLabel: event.target.value })} /></label>
+        <AccountListEditor
+          side="신랑측"
+          accounts={settings.groomAccounts}
+          onChange={(groomAccounts) => update({ groomAccounts })}
+        />
+
+        <h3>신부측 계좌번호</h3>
+        <label>버튼 문구 <input className="admin-input" value={settings.brideAccountLabel} onChange={(event) => update({ brideAccountLabel: event.target.value })} /></label>
+        <AccountListEditor
+          side="신부측"
+          accounts={settings.brideAccounts}
+          onChange={(brideAccounts) => update({ brideAccounts })}
+        />
+
+        <p className="admin-note">계좌를 모두 삭제하면 청첩장에서 해당 버튼이 사라집니다.</p>
+        <button type="button" className="admin-section-save" onClick={() => saveSection('계좌번호')}>계좌번호 변경사항 저장</button>
       </section>}
 
       {activeSection === 'ending' && <section className="admin-section">

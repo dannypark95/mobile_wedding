@@ -29,6 +29,16 @@
     <meta name="twitter:description" content="2026. 10. 24 토요일 오후 2:30 · 부산 센텀호텔" />
     <meta name="twitter:image" content="https://sunghyunyeeun.com/preview.png" />
 
+    <!-- The hero photo cannot be requested until the settings document says which photo is
+         current, so the DNS + TLS cost of these two hosts sits directly on the critical path.
+         Paying it here, in parallel with the bundle download, is the difference between the
+         hero appearing at once and appearing a beat late. The crossorigin split is deliberate:
+         the settings document arrives over a CORS fetch (anonymous connection pool), the photo
+         over a plain img element (credentialed pool), and a mismatched hint just opens a
+         second connection and warms nothing. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+
     <!-- Nanum Myeongjo is the only webfont the design actually uses. It was previously
          pulled in via an @import inside the bundled CSS, which forced the browser to
          download and parse that CSS before it could even discover the font. Loading it

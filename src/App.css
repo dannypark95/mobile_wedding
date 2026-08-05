@@ -104,6 +104,14 @@
   margin-top: 18px;
 }
 
+/* A tab that edits more than one block of the invitation (오시는 길 + 안내, 신랑측 + 신부측
+   계좌) needs its groups told apart, or the fields run together into one long column. */
+.admin-section h3:not(:first-child) {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px dashed #3f3f46;
+}
+
 .admin-jump-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -136,7 +144,9 @@
 
 .admin-section-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Three across, wrapping onto a second row: six tabs on one line leaves each one too narrow
+     to read the Korean label, let alone tap. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -195,6 +205,59 @@
   min-height: 132px;
   resize: vertical;
   line-height: 1.6;
+}
+
+.admin-textarea-short {
+  min-height: 84px;
+}
+
+.admin-note {
+  margin: -4px 0 16px;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.admin-cards {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-card {
+  padding: 12px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background: #18181b;
+}
+
+.admin-card label:last-of-type {
+  margin-bottom: 0;
+}
+
+.admin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.admin-card-head strong {
+  color: #fafafa;
+  font-size: 12px;
+}
+
+.admin-card-remove {
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: #09090b;
+  color: #d4d4d8;
+  cursor: pointer;
+  font-family: var(--ff-body);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 10px;
 }
 
 .admin-section select option {
@@ -1091,7 +1154,12 @@
   height: 100%;
   display: block;
   object-fit: cover;
-  transition: transform 0.18s ease, object-position 0.18s ease;
+  transition: transform 0.18s ease, object-position 0.18s ease, opacity 0.4s ease;
+}
+/* Held on the first visit only, while we find out from Firestore which photo is current.
+   The frame keeps its space, so nothing shifts when the photo arrives. */
+.hero-photo img.hero-photo-hold {
+  opacity: 0;
 }
 .hero-photo-gradient {
   position: absolute;
@@ -1402,6 +1470,12 @@
   font-size: 14px;
   line-height: 2.2;
   color: var(--c-black70);
+}
+.info-block strong {
+  display: block;
+}
+.info-block + .info-block {
+  margin-top: 1.6em;
 }
 
 /* ── Thanks To ── */

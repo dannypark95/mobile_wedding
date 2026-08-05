@@ -7,18 +7,80 @@ import bgMusicAac from '../music/bgm.m4a'
 import bgMusicMp3 from '../music/bgm.mp3'
 
 import './App.css'
-import { cropStyle, defaultSettings, fetchSettings, type WeddingSettings } from './settings'
+import {
+  cacheSettings,
+  cropStyle,
+  defaultSettings,
+  fetchSettings,
+  loadCachedSettings,
+  preloadImage,
+  type AccountEntry,
+  type WeddingSettings,
+} from './settings'
 
 // The admin panel pulls in the Firebase SDK (auth + firestore + storage). Loading it lazily
 // keeps it out of the bundle guests download; only /admin ever pays for it.
 const AdminPanel = lazy(() => import('./AdminPanel'))
 
+// Read at import time, not inside the component: the first render has to already know which
+// photo it is painting, and useState initialisers run twice under StrictMode.
+const cachedSettings = loadCachedSettings()
+const initialSettings = cachedSettings ?? defaultSettings
+
+// How long the hero photo will wait for Firestore before falling back to whatever this build
+// bundles. Long enough to cover a normal round trip, short enough that a guest on a dead
+// network is not staring at an empty frame.
+const HERO_SETTINGS_DEADLINE_MS = 1500
+
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }
 
+/** Render an admin-editable string, honouring the line breaks they typed. */
+function Multiline({ text }: { text: string }) {
+  const lines = text.split('\n')
+  return (
+    <>
+      {lines.map((line, index) => (
+        <span key={`${line}-${index}`}>
+          {line}
+          {index < lines.length - 1 && <br />}
+        </span>
+      ))}
+    </>
+  )
+}
+
+function AccountRow({
+  account,
+  onCopy,
+}: {
+  account: AccountEntry
+  onCopy: (accountNumber: string) => void
+}) {
+  return (
+    <div className="acct-row">
+      <div className="acct-info">
+        <span className="acct-label">{account.role}</span>
+        <span className="acct-name">{account.name}</span>
+      </div>
+      <div className="acct-detail">
+        <span className="acct-bank">{account.bank}</span>
+        <span className="acct-number">{account.number}</span>
+        {/* A row with no number left to copy would hand the guest a button that copies "". */}
+        {account.number && (
+          <button type="button" className="copy-btn" onClick={() => onCopy(account.number)}>복사</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function App() {
-  const [settings, setSettings] = useState<WeddingSettings>(defaultSettings)
+  const [settings, setSettings] = useState<WeddingSettings>(initialSettings)
+  // With a cache we already know the real photo, so it can paint on the first frame. Without
+  // one, hold it back rather than show the bundled photo and swap it out mid-look.
+  const [heroReady, setHeroReady] = useState(cachedSettings !== null)
   const [cd, setCd] = useState({ d: 0, h: 0, m: 0, s: 0 })
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -35,15 +97,34 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController()
+    let active = true
+    const deadline = setTimeout(() => setHeroReady(true), HERO_SETTINGS_DEADLINE_MS)
     fetchSettings(controller.signal)
-      .then(setSettings)
+      .then(async (remote) => {
+        if (!active) return
+        // Committing a photo URL the browser has not downloaded yet empties the hero for the
+        // length of that download — the flash the couple sees after every /admin upload. Wait
+        // for the bytes, then swap in one frame. An unchanged photo skips the wait entirely,
+        // which is the usual case once the cache above is warm.
+        if (remote.mainPhoto !== initialSettings.mainPhoto) await preloadImage(remote.mainPhoto)
+        if (!active) return
+        setSettings(remote)
+        cacheSettings(remote)
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         // The bundled defaults already render a complete invitation, so a failed fetch is not
         // worth a toast on the guest page — it would alarm people over nothing.
         console.warn('Falling back to bundled settings.', error)
       })
-    return () => controller.abort()
+      .finally(() => {
+        if (active) setHeroReady(true)
+      })
+    return () => {
+      active = false
+      clearTimeout(deadline)
+      controller.abort()
+    }
   }, [])
 
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -243,6 +324,7 @@ function App() {
 
   const galleryPhotos = settings.galleryPhotos
   const activeLightbox = lightbox !== null && lightbox < galleryPhotos.length ? lightbox : null
+  const mapQuery = encodeURIComponent(settings.locationQuery)
 
   const closeLightbox = useCallback(() => setLightbox(null), [])
   const prevSlide = useCallback(() => {
@@ -337,10 +419,14 @@ function App() {
               <span className="hero-date-full">2026 / 10 / 24</span>
               <span className="hero-day">SATURDAY</span>
             </div>
-            {/* The only image above the fold, and it is discovered late because React renders it.
-                fetchPriority tells the browser not to queue it behind the rest. */}
+            {/* The only image above the fold, and it is discovered late because React renders
+                it. fetchPriority tells the browser not to queue it behind the rest.
+                No src until the photo is settled, though: on a cold cache the bundled default
+                is not the photo the couple uploaded, so requesting it would spend ~110 KB of a
+                guest's critical path on a picture we are about to replace. */}
             <img
-              src={settings.mainPhoto}
+              className={heroReady ? undefined : 'hero-photo-hold'}
+              src={heroReady ? settings.mainPhoto : undefined}
               alt="성현과 예은"
               fetchPriority="high"
               decoding="async"
@@ -365,12 +451,7 @@ function App() {
             <div className="section-heading">{settings.invitationHeading}</div>
           </div>
           <div className="section-body fade-up">
-            {settings.invitationBody.split('\n').map((line, index, lines) => (
-              <span key={`${line}-${index}`}>
-                {line}
-                {index < lines.length - 1 && <br />}
-              </span>
-            ))}
+            <Multiline text={settings.invitationBody} />
           </div>
           <div className="invite-photo fade-up">
             <img
@@ -487,13 +568,11 @@ function App() {
         {/* Location */}
         <section className="section-wrap">
           <div className="fade-up">
-            <div className="section-label">LOCATION</div>
-            <div className="section-heading">오시는 길</div>
+            <div className="section-label">{settings.locationLabel}</div>
+            <div className="section-heading">{settings.locationHeading}</div>
           </div>
           <div className="location-addr fade-up">
-            부산광역시 해운대구 센텀5로 26
-            <br />
-            부산 센텀호텔 4F 벨라홀
+            <Multiline text={settings.locationAddress} />
           </div>
           <div className="map-img-wrap fade-up">
             <img src={mapImage} alt="센텀호텔 약도" loading="lazy" decoding="async" />
@@ -504,7 +583,7 @@ function App() {
           <div className="map-buttons fade-up">
             <a
               className="map-btn map-btn-naver"
-              href="https://map.naver.com/p/search/%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              href={`https://map.naver.com/p/search/${mapQuery}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -513,7 +592,7 @@ function App() {
             </a>
             <a
               className="map-btn map-btn-kakao"
-              href="https://map.kakao.com/?q=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              href={`https://map.kakao.com/?q=${mapQuery}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -522,7 +601,7 @@ function App() {
             </a>
             <a
               className="map-btn map-btn-tmap"
-              href="https://map.tmap.co.kr/search?query=%EB%B6%80%EC%82%B0%20%EC%84%BC%ED%85%80%ED%98%B8%ED%85%94%EC%9B%A8%EB%94%A9%ED%99%80"
+              href={`https://map.tmap.co.kr/search?query=${mapQuery}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -533,105 +612,68 @@ function App() {
         </section>
 
         {/* Information */}
-        <section className="section-wrap alt-bg">
-          <div className="fade-up">
-            <div className="section-label">INFORMATION</div>
-            <div className="section-heading">오시는 길 안내</div>
-          </div>
-          <div className="info-body fade-up">
-            <strong>대중교통</strong>
-            <br />
-            지하철 2호선 센텀시티역 하차 후 도보 이동 가능합니다.
-            <br />
-            버스 이용 시 센텀시티 또는 벡스코 정류장을 이용해 주세요.
-            <br /><br />
-            <strong>주차 안내</strong>
-            <br />
-            예식장 건물 내 주차장을 이용하실 수 있습니다.
-            <br />
-            주차권 또는 무료 주차 시간 안내는 추후 확정 후 업데이트하겠습니다.
-          </div>
-        </section>
+        {(settings.infoHeading || settings.infoBlocks.length > 0) && (
+          <section className="section-wrap alt-bg">
+            <div className="fade-up">
+              <div className="section-label">{settings.infoLabel}</div>
+              <div className="section-heading">{settings.infoHeading}</div>
+            </div>
+            <div className="info-body fade-up">
+              {settings.infoBlocks.map((block, index) => (
+                <div className="info-block" key={`${block.title}-${index}`}>
+                  {block.title && <strong>{block.title}</strong>}
+                  <Multiline text={block.body} />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Thanks To */}
         <section className="section-wrap">
           <div className="fade-up">
-            <div className="section-label">THANKS TO</div>
-            <div className="section-heading">마음 전하실 곳</div>
+            <div className="section-label">{settings.thanksLabel}</div>
+            <div className="section-heading">{settings.thanksHeading}</div>
           </div>
           <div className="thanks-body fade-up">
-            참석이 어려운 분들을 위해 계좌번호를 기재했습니다.
-            <br />
-            따뜻한 마음으로 양해 부탁드립니다.
+            <Multiline text={settings.thanksBody} />
           </div>
-          <div className="acct-box fade-up">
-            <button type="button" className="acct-btn" onClick={() => setGroomOpen((open) => !open)}>
-              신랑측 계좌번호
-              <svg className={`acct-arrow ${groomOpen ? 'acct-arrow-open' : ''}`} viewBox="0 0 24 24">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {groomOpen && (
-              <div className="acct-panel">
-                <div className="acct-row">
-                  <div className="acct-info">
-                    <span className="acct-label">신랑</span>
-                    <span className="acct-name">박성현</span>
-                  </div>
-                  <div className="acct-detail">
-                    <span className="acct-bank">국민은행</span>
-                    <span className="acct-number">433401-01-469146</span>
-                    <button type="button" className="copy-btn" onClick={() => copyAccount('433401-01-469146')}>복사</button>
-                  </div>
+          {/* An empty list means the couple deleted every row for that side, so the whole
+              accordion goes with it rather than opening onto nothing. */}
+          {settings.groomAccounts.length > 0 && (
+            <div className="acct-box fade-up">
+              <button type="button" className="acct-btn" onClick={() => setGroomOpen((open) => !open)}>
+                {settings.groomAccountLabel}
+                <svg className={`acct-arrow ${groomOpen ? 'acct-arrow-open' : ''}`} viewBox="0 0 24 24">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {groomOpen && (
+                <div className="acct-panel">
+                  {settings.groomAccounts.map((account, index) => (
+                    <AccountRow key={`groom-${index}`} account={account} onCopy={copyAccount} />
+                  ))}
                 </div>
-                <div className="acct-row">
-                  <div className="acct-info">
-                    <span className="acct-label">혼주</span>
-                    <span className="acct-name">박영준</span>
-                  </div>
-                  <div className="acct-detail">
-                    <span className="acct-bank">은행명</span>
-                    <span className="acct-number">0000-00-0000000</span>
-                    <button type="button" className="copy-btn" onClick={() => copyAccount('0000-00-0000000')}>복사</button>
-                  </div>
+              )}
+            </div>
+          )}
+          {settings.brideAccounts.length > 0 && (
+            <div className="acct-box fade-up">
+              <button type="button" className="acct-btn" onClick={() => setBrideOpen((open) => !open)}>
+                {settings.brideAccountLabel}
+                <svg className={`acct-arrow ${brideOpen ? 'acct-arrow-open' : ''}`} viewBox="0 0 24 24">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {brideOpen && (
+                <div className="acct-panel">
+                  {settings.brideAccounts.map((account, index) => (
+                    <AccountRow key={`bride-${index}`} account={account} onCopy={copyAccount} />
+                  ))}
                 </div>
-              </div>
-            )}
-          </div>
-          <div className="acct-box fade-up">
-            <button type="button" className="acct-btn" onClick={() => setBrideOpen((open) => !open)}>
-              신부측 계좌번호
-              <svg className={`acct-arrow ${brideOpen ? 'acct-arrow-open' : ''}`} viewBox="0 0 24 24">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {brideOpen && (
-              <div className="acct-panel">
-                <div className="acct-row">
-                  <div className="acct-info">
-                    <span className="acct-label">신부</span>
-                    <span className="acct-name">배예은</span>
-                  </div>
-                  <div className="acct-detail">
-                    <span className="acct-bank">토스뱅크</span>
-                    <span className="acct-number">0000-00-0000000</span>
-                    <button type="button" className="copy-btn" onClick={() => copyAccount('0000-00-0000000')}>복사</button>
-                  </div>
-                </div>
-                <div className="acct-row">
-                  <div className="acct-info">
-                    <span className="acct-label">혼주</span>
-                    <span className="acct-name">김미경</span>
-                  </div>
-                  <div className="acct-detail">
-                    <span className="acct-bank">은행명</span>
-                    <span className="acct-number">0000-00-0000000</span>
-                    <button type="button" className="copy-btn" onClick={() => copyAccount('0000-00-0000000')}>복사</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* RSVP */}
