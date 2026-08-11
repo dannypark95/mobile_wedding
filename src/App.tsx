@@ -715,7 +715,7 @@ function App() {
             </a>
             <a
               className="map-btn map-btn-tmap"
-              href={`https://map.tmap.co.kr/search?query=${mapQuery}`}
+              href={settings.locationTmapUrl.trim() || `https://map.tmap.co.kr/search?query=${mapQuery}`}
               target="_blank"
               rel="noopener noreferrer"
             >

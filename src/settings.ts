@@ -59,6 +59,12 @@ export type WeddingSettings = {
   // Drives the naver/kakao/tmap deep links, so moving the venue moves the buttons with it
   // instead of leaving three links pointing at the old hall.
   locationQuery: string
+  /**
+   * A TMAP share link (tmap.life/…) pinned to the exact venue. TMAP's web search resolves
+   * 부산 센텀호텔웨딩홀 poorly, so this overrides the query URL when set; blank falls back
+   * to searching locationQuery like the other two apps.
+   */
+  locationTmapUrl: string
   infoLabel: string
   infoHeading: string
   infoBlocks: InfoBlock[]
@@ -114,8 +120,9 @@ export const defaultSettings: WeddingSettings = {
   galleryLabel: 'GALLERY',
   locationLabel: 'LOCATION',
   locationHeading: '오시는 길',
-  locationAddress: '부산광역시 해운대구 센텀5로 26\n부산 센텀호텔 4F 벨라홀',
+  locationAddress: '부산광역시 해운대구 센텀3로 20\n부산 센텀호텔 4F 벨라홀',
   locationQuery: '부산 센텀호텔웨딩홀',
+  locationTmapUrl: 'https://tmap.life/773b2dac',
   infoLabel: 'INFORMATION',
   infoHeading: '오시는 길 안내',
   // Each block is one tap-to-open route. Within a body, `#` opens a sub-heading and `※`

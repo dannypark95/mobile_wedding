@@ -1053,7 +1053,14 @@
   padding: 14px 28px;
   border-radius: 28px;
   text-align: center;
-  max-width: calc(100% - 60px);
+  /* left:50% with no right leaves the box only half the viewport to lay out in, so max-width
+     never applied and even a short message wrapped — "복사되었습니다." was breaking onto a
+     line of its own. max-content sizes to the unwrapped string, capped against the viewport
+     rather than that half-width containing block. */
+  width: max-content;
+  max-width: calc(100vw - 60px);
+  /* Korean has no inter-word break opportunity by default, so a wrap lands mid-어절. */
+  word-break: keep-all;
   backdrop-filter: blur(6px);
   /* The 1.4s delay + 0.3s fade must land on TOAST_MS in App.tsx (1700ms). */
   animation: toastIn 0.3s ease, toastOut 0.3s ease 1.4s forwards;

@@ -634,7 +634,10 @@ export default function AdminPanel({
         <label>지도 검색어
           <input className="admin-input" value={settings.locationQuery} onChange={(event) => update({ locationQuery: event.target.value })} />
         </label>
-        <p className="admin-note">네이버 지도 · 카카오맵 · 티맵 버튼이 이 검색어로 연결됩니다. 약도 이미지는 코드에 포함된 파일이라 여기서는 바꿀 수 없어요.</p>
+        <label>티맵 전용 링크 (선택)
+          <input className="admin-input" value={settings.locationTmapUrl} onChange={(event) => update({ locationTmapUrl: event.target.value })} placeholder="https://tmap.life/..." />
+        </label>
+        <p className="admin-note">네이버 지도 · 카카오맵은 위 검색어로 연결됩니다. 티맵은 검색 결과가 정확하지 않아, 티맵 앱에서 장소를 공유해 받은 링크를 여기에 넣으면 그 링크로 바로 연결됩니다. 비워두면 티맵도 검색어를 사용합니다. 약도 이미지는 코드에 포함된 파일이라 여기서는 바꿀 수 없어요.</p>
 
         <h3>오시는 길 안내</h3>
         <p className="admin-note">안내 하나가 접었다 펴지는 항목 하나입니다. 내용에서 줄 앞에 <code>#</code>을 붙이면 작은 제목(예: <code># 버스 이용 시</code>), <code>※</code>를 붙이면 참고 문구로 표시됩니다.</p>
