@@ -20,6 +20,8 @@ export const SETTINGS_REST_URL =
 export type InfoBlock = {
   title: string
   body: string
+  /** Render expanded with no toggle — for the short blocks every guest needs anyway. */
+  alwaysOpen: boolean
 }
 
 export type AccountEntry = {
@@ -103,7 +105,9 @@ export const defaultSettings: WeddingSettings = {
   invitationCropY: 50,
   invitationLabel: 'INVITATION',
   invitationHeading: '초대합니다.',
-  invitationBody: '서로가 마주 보며 다져온 사랑을\n이제 함께 한곳을 바라보며 걸어갈 수 있는\n큰 사랑으로 키우고자 합니다.\n저희가 지켜나갈 수 있게\n앞날을 축복해 주시면 감사하겠습니다.',
+  // The blank line is load-bearing: Paragraphs splits on it so the verse and the message
+  // reveal separately as the guest scrolls.
+  invitationBody: '내가 너희를 사랑한 것 같이\n너희도 서로 사랑하라\n(요한복음 13:34)\n\n서로가 마주 보며 다져온 사랑을\n이제 함께 한 곳을 바라보며 걸어갈 수 있는\n큰 사랑으로 키우고자 합니다.\n저희가 이 고백을 평생 지켜나갈 수 있도록\n앞날을 축복해 주세요.',
   invitationGroomLine: '박 영 준 의 아들  박 성 현',
   invitationBrideLine: '김 미 경 의 딸  배 예 은',
   galleryPhotos: albumPhotos,
@@ -114,14 +118,33 @@ export const defaultSettings: WeddingSettings = {
   locationQuery: '부산 센텀호텔웨딩홀',
   infoLabel: 'INFORMATION',
   infoHeading: '오시는 길 안내',
+  // Each block is one tap-to-open route. Within a body, `#` opens a sub-heading and `※`
+  // marks a footnote — see InfoBody in App.tsx.
   infoBlocks: [
     {
-      title: '대중교통',
-      body: '지하철 2호선 센텀시티역 하차 후 도보 이동 가능합니다.\n버스 이용 시 센텀시티 또는 벡스코 정류장을 이용해 주세요.',
+      title: '🚇 지하철',
+      body: '부산 지하철 2호선 센텀시티역 하차\n3번 출구에서 도보 1분 (약 100m)',
+      alwaysOpen: false,
     },
     {
-      title: '주차 안내',
-      body: '예식장 건물 내 주차장을 이용하실 수 있습니다.\n주차권 또는 무료 주차 시간 안내는 추후 확정 후 업데이트하겠습니다.',
+      title: '🚌 시내버스',
+      body: '# 센텀시티역·벡스코 정류장 하차 (도보 1~2분)\n일반버스: 5-1, 39, 40, 63, 107, 115, 139, 141, 155, 181\n급행버스: 1001, 1002, 1006\n\n# 벡스코 정류장 하차 (도보 3~4분)\n일반버스: 307',
+      alwaysOpen: false,
+    },
+    {
+      title: '🚄 부산역(KTX/SRT)에서 오시는 길',
+      body: '# 지하철 이용 시\n[1호선] 부산역 승차 ➔ 서면역에서 [2호선(장산 방향)] 환승 ➔ 센텀시티역 하차 (3번 출구)\n\n# 버스 이용 시\n부산역 광장 앞 정류장에서 1001번(급행) 또는 40번, 5-1번(일반) 탑승 ➔ 센텀시티역·벡스코 정류장 하차 (도보 2분)',
+      alwaysOpen: false,
+    },
+    {
+      title: '✈️ 김해공항에서 오시는 길',
+      body: '※ 기존 공항리무진 운행 중단으로 대체 급행버스 운행\n\n# 급행버스 이용 시 (2029번)\n승차: 김해공항 1층 (국제선/국내선 2번 승차장)에서 2029번 탑승\n하차: 벡스코 정류장 하차 (도보 3분)\n\n# 시내버스 이용 시 (307번)\n승차: 김해공항 1층 승차장에서 307번 탑승\n하차: 벡스코 정류장 하차 (도보 3분)\n\n# 지하철 이용 시\n[부산김해경전철] 공항역 승차 ➔ 사상역에서 [2호선(장산 방향)] 환승 ➔ 센텀시티역 하차 (3번 출구)',
+      alwaysOpen: false,
+    },
+    {
+      title: '🅿️ 주차 안내',
+      body: '본건물 지하주차장(B2~B5층) 이용 시 2시간 무료\n\n※ 예식 당일 주차장이 혼잡할 수 있으니 가급적 대중교통 이용을 부탁드립니다.',
+      alwaysOpen: false,
     },
   ],
   thanksLabel: 'THANKS TO',
@@ -130,7 +153,7 @@ export const defaultSettings: WeddingSettings = {
   groomAccountLabel: '신랑측 계좌번호',
   groomAccounts: [
     { role: '신랑', name: '박성현', bank: '국민은행', number: '433401-01-469146' },
-    { role: '혼주', name: '박영준', bank: '은행명', number: '0000-00-0000000' },
+    { role: '혼주', name: '박영준', bank: '농협', number: '356-1519-1790-93' },
   ],
   brideAccountLabel: '신부측 계좌번호',
   brideAccounts: [
@@ -182,6 +205,9 @@ function resolveRows<T>(remote: unknown, fallback: T[], row: (source: Record<str
 const toInfoBlock = (source: Record<string, unknown>): InfoBlock => ({
   title: text(source.title),
   body: text(source.body),
+  // Absent on every block saved before this field existed, which should read as "collapsed"
+  // rather than crash or default to open.
+  alwaysOpen: source.alwaysOpen === true,
 })
 
 const toAccount = (source: Record<string, unknown>): AccountEntry => ({

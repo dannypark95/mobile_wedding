@@ -6,6 +6,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { auth, db, storage } from './firebase'
 import {
   cropStyle,
+  defaultSettings,
   preloadImage,
   settingsForSave,
   SETTINGS_DOC_PATH,
@@ -39,7 +40,7 @@ const SECTION_TABS: { key: AdminSectionKey, label: string }[] = [
 ]
 
 const EMPTY_ACCOUNT: AccountEntry = { role: '', name: '', bank: '', number: '' }
-const EMPTY_INFO_BLOCK: InfoBlock = { title: '', body: '' }
+const EMPTY_INFO_BLOCK: InfoBlock = { title: '', body: '', alwaysOpen: false }
 
 /**
  * The 계좌번호 rows for one side of the family. Both sides are the same editor, so it takes the
@@ -636,6 +637,7 @@ export default function AdminPanel({
         <p className="admin-note">네이버 지도 · 카카오맵 · 티맵 버튼이 이 검색어로 연결됩니다. 약도 이미지는 코드에 포함된 파일이라 여기서는 바꿀 수 없어요.</p>
 
         <h3>오시는 길 안내</h3>
+        <p className="admin-note">안내 하나가 접었다 펴지는 항목 하나입니다. 내용에서 줄 앞에 <code>#</code>을 붙이면 작은 제목(예: <code># 버스 이용 시</code>), <code>※</code>를 붙이면 참고 문구로 표시됩니다.</p>
         <label>라벨 <input className="admin-input" value={settings.infoLabel} onChange={(event) => update({ infoLabel: event.target.value })} /></label>
         <label>제목 <input className="admin-input" value={settings.infoHeading} onChange={(event) => update({ infoHeading: event.target.value })} /></label>
         <div className="admin-cards">
@@ -654,7 +656,7 @@ export default function AdminPanel({
                   삭제
                 </button>
               </div>
-              <label>소제목 (예: 대중교통)
+              <label>소제목 (예: 🚇 지하철)
                 <input
                   className="admin-input"
                   value={block.title}
@@ -672,6 +674,16 @@ export default function AdminPanel({
                   })}
                 />
               </label>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={block.alwaysOpen}
+                  onChange={(event) => update({
+                    infoBlocks: settings.infoBlocks.map((row, i) => (i === index ? { ...row, alwaysOpen: event.target.checked } : row)),
+                  })}
+                />
+                항상 펼쳐두기 (접기 버튼 없이 바로 보임)
+              </label>
             </div>
           ))}
           <button
@@ -680,6 +692,20 @@ export default function AdminPanel({
             onClick={() => update({ infoBlocks: [...settings.infoBlocks, { ...EMPTY_INFO_BLOCK }] })}
           >
             + 안내 추가
+          </button>
+          {/* The saved document overrides whatever this build bundles, so a doc holding one
+              long block keeps rendering as one long block no matter what the defaults say.
+              This drops the bundled 지하철/시내버스/부산역/김해공항/주차 split back in as
+              separate 안내 rows, ready to edit before saving. */}
+          <button
+            type="button"
+            className="admin-secondary"
+            onClick={() => {
+              if (!window.confirm('지금 작성된 안내를 모두 지우고 기본 안내(지하철 · 시내버스 · 부산역 · 김해공항 · 주차)로 채울까요?')) return
+              update({ infoBlocks: defaultSettings.infoBlocks.map((block) => ({ ...block })) })
+            }}
+          >
+            기본 안내로 채우기
           </button>
         </div>
         <button type="button" className="admin-section-save" onClick={() => saveSection('오시는 길')}>오시는 길 변경사항 저장</button>

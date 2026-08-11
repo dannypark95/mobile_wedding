@@ -217,6 +217,31 @@
   font-size: 11px;
   line-height: 1.55;
 }
+.admin-note code {
+  background: #27272a;
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: #e4e4e7;
+}
+/* The surrounding `label` rules stack their control underneath; a checkbox belongs beside
+   its text. */
+.admin-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.admin-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #6366f1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
 
 .admin-cards {
   display: grid;
@@ -1030,7 +1055,8 @@
   text-align: center;
   max-width: calc(100% - 60px);
   backdrop-filter: blur(6px);
-  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.2s forwards;
+  /* The 1.4s delay + 0.3s fade must land on TOAST_MS in App.tsx (1700ms). */
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 1.4s forwards;
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1081,12 +1107,37 @@
 /* ── Fade animation ── */
 .fade-up {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.7s ease, transform 0.7s ease;
+  transform: translateY(26px);
+  /* Expo-out rather than plain ease: it covers most of the distance early and settles, which
+     reads as motion easing to a stop instead of gliding at a constant rate. */
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
 }
 .fade-up.is-visible {
   opacity: 1;
   transform: translateY(0);
+  will-change: auto;
+}
+/* Paragraphs of one passage, split so each reveals on its own — they need the gap the blank
+   line used to provide when they were a single block. */
+.reveal-para + .reveal-para {
+  margin-top: 1.5em;
+}
+/* An audience that skews elderly is likelier to have this on, and a page that slides every
+   block into place can be genuinely unpleasant with it. Content still appears — it just
+   appears, rather than travelling. */
+@media (prefers-reduced-motion: reduce) {
+  .fade-up {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .info-panel {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 /* ── Hero / Save the Date ── */
@@ -1199,6 +1250,11 @@
 .section-wrap.alt-bg {
   background: var(--c-white);
 }
+/* The Information section above 마음 전하실 곳 is conditional, so nth-child parity is not a
+   background the tail of the page can rely on. Every section from there down states its own. */
+.section-wrap.tint-bg {
+  background: var(--c-main03);
+}
 .section-wrap.gallery-section {
   padding-left: 0;
   padding-right: 0;
@@ -1206,6 +1262,7 @@
 }
 .section-wrap.gallery-section > .fade-up:first-child {
   padding: 0 30px;
+  margin-bottom: 26px;
 }
 .section-label {
   font-family: var(--ff);
@@ -1468,14 +1525,100 @@
 .info-body {
   font-family: var(--ff);
   font-size: 14px;
-  line-height: 2.2;
   color: var(--c-black70);
+  /* Routes are steps, not prose — centring them would leave every line on a different
+     left edge and make the sequence hard to follow. */
+  text-align: left;
 }
-.info-block strong {
-  display: block;
+.info-box {
+  margin-bottom: 9px;
+  /* Lighter and rounder than the 계좌번호 boxes: five of these stack in a row, and five
+     full-strength rectangles read as a heavy grid rather than a quiet list. */
+  border: 1px solid rgba(102, 100, 100, 0.22);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--c-white);
 }
-.info-block + .info-block {
-  margin-top: 1.6em;
+.info-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 15px 18px;
+  border: none;
+  background: var(--c-white);
+  font-family: var(--ff);
+  font-size: 14px;
+  color: var(--c-main);
+  text-align: left;
+  cursor: pointer;
+}
+.info-btn:active {
+  background: #f5f5f5;
+}
+.info-panel {
+  border-top: 1px dotted var(--c-main40);
+  padding: 15px 18px 17px;
+  /* Deliberately not the acctSlide keyframe the 계좌번호 boxes use: that one animates
+     max-height to a fixed 400px and holds it, which would clip the 김해공항 block. */
+  animation: infoSlide 0.25s ease forwards;
+}
+@keyframes infoSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* An always-open block keeps the bordered box so it sits in the same column as the
+   collapsible ones, but its title is a plain heading — no chevron to imply a tap that
+   does nothing. */
+.info-static-title {
+  padding: 15px 18px;
+  font-family: var(--ff);
+  font-size: 14px;
+  color: var(--c-main);
+}
+.info-panel-static {
+  animation: none;
+}
+/* An untitled block has no header above it, so the panel's divider would be a stray rule
+   across the top of the box. */
+.info-box-open > .info-panel:first-child {
+  border-top: none;
+}
+/* The step lines under a sub-heading are the same size and nearly the same colour, so
+   weight alone did not separate them — at a glance a panel read as one run of text. The
+   rule carries the break instead. */
+.info-sub {
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-black);
+  letter-spacing: 0.02em;
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(102, 100, 100, 0.13);
+}
+.info-line + .info-sub,
+.info-note + .info-sub {
+  margin-top: 12px;
+}
+.info-line {
+  font-family: var(--ff-body);
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--c-black70);
+  margin: 0;
+}
+.info-note {
+  font-family: var(--ff-body);
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--c-main70);
+  margin: 0;
+}
+.info-gap {
+  height: 14px;
 }
 
 /* ── Thanks To ── */
@@ -1512,6 +1655,15 @@
   stroke: var(--c-main70);
   stroke-width: 2;
   transition: transform 0.3s ease;
+}
+/* The 오시는 길 rows are a quiet list, so their chevron is smaller and lighter than the one
+   on the two 계좌번호 buttons. */
+.info-btn .acct-arrow {
+  width: 17px;
+  height: 17px;
+  stroke: var(--c-main40);
+  stroke-width: 2.2;
+  flex: 0 0 auto;
 }
 .acct-arrow-open {
   transform: rotate(180deg);
@@ -1604,6 +1756,39 @@
   cursor: pointer;
 }
 .rsvp-btn:active {
+  background: #f5f5f5;
+}
+
+/* ── Share ── */
+.share-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: calc(100% - 80px);
+  margin: 0 auto;
+}
+.share-btn {
+  width: 100%;
+  padding: 15px 0;
+  font-family: var(--ff);
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  min-height: 44px;
+}
+.share-primary {
+  background: var(--c-main);
+  color: var(--c-white);
+}
+.share-primary:active {
+  opacity: 0.85;
+}
+.share-copy {
+  background: var(--c-white);
+  border-color: var(--c-main);
+  color: var(--c-main);
+}
+.share-copy:active {
   background: #f5f5f5;
 }
 
@@ -1960,7 +2145,7 @@
 /* ── Footer ── */
 .footer {
   text-align: center;
-  padding: 40px 20px 50px;
+  padding: 20px 20px 24px;
   font-size: 12px;
   color: var(--c-main70);
   font-family: var(--ff-body);
@@ -2025,9 +2210,9 @@
   background: rgba(255, 255, 255, 0.15);
   border: none;
   color: #fff;
-  font-size: 32px;
   width: 44px;
   height: 44px;
+  padding: 0;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -2035,6 +2220,25 @@
   justify-content: center;
   z-index: 10;
   backdrop-filter: blur(4px);
+}
+/* A chevron drawn as SVG rather than the &lsaquo; / &rsaquo; glyphs those buttons used to
+   hold: a text glyph sits on a baseline and carries its own side bearings, so it never
+   optically centred in the circle and its weight shifted with whichever font resolved. */
+.lb-arrow svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lb-prev svg {
+  margin-left: -2px;
+}
+.lb-next svg {
+  margin-right: -2px;
 }
 .lb-arrow:active {
   background: rgba(255, 255, 255, 0.3);

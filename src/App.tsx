@@ -36,6 +36,50 @@ function pad(n: number) {
   return String(n).padStart(2, '0')
 }
 
+/**
+ * An 오시는 길 안내 body, which is a route rather than a paragraph: a handful of ways to get
+ * here, each with its own steps and caveats. Two prefixes give the couple that structure from
+ * the plain textarea in /admin without their having to learn anything resembling markup —
+ * `#` opens a sub-heading (버스 이용 시), `※` or `*` marks a footnote. A line using neither
+ * is an ordinary step, so existing copy keeps rendering exactly as it did.
+ */
+function InfoBody({ text }: { text: string }) {
+  return (
+    <>
+      {text.split('\n').map((line, index) => {
+        const trimmed = line.trim()
+        const key = `${trimmed}-${index}`
+        if (!trimmed) return <div className="info-gap" key={key} />
+        if (trimmed.startsWith('#')) {
+          return <p className="info-sub" key={key}>{trimmed.replace(/^#\s*/, '')}</p>
+        }
+        if (/^[※*]/.test(trimmed)) {
+          return <p className="info-note" key={key}>{trimmed}</p>
+        }
+        return <p className="info-line" key={key}>{trimmed}</p>
+      })}
+    </>
+  )
+}
+
+/**
+ * Split an admin-typed body on blank lines so each paragraph reveals on its own as the guest
+ * scrolls, instead of the whole passage appearing at once. A body with no blank line yields a
+ * single block, so copy written before this still renders exactly as it did.
+ */
+function Paragraphs({ text, className }: { text: string; className?: string }) {
+  const blocks = text.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean)
+  return (
+    <>
+      {blocks.map((block, index) => (
+        <div className={`${className ?? ''} reveal-para fade-up`.trim()} key={`${index}-${block.slice(0, 12)}`}>
+          <Multiline text={block} />
+        </div>
+      ))}
+    </>
+  )
+}
+
 /** Render an admin-editable string, honouring the line breaks they typed. */
 function Multiline({ text }: { text: string }) {
   const lines = text.split('\n')
@@ -88,11 +132,19 @@ function App() {
   const isAdminView = window.location.pathname.replace(/\/$/, '').endsWith('/admin')
   const [groomOpen, setGroomOpen] = useState(false)
   const [brideOpen, setBrideOpen] = useState(false)
+  // Keyed by index and independent, matching how the two 계좌번호 accordions already behave —
+  // a guest checking the airport route should not have the subway route close under them.
+  const [openInfo, setOpenInfo] = useState<Record<number, boolean>>({})
+
+  // Keep in step with the toastOut delay in App.css — the CSS fades the toast out and this
+  // timer unmounts it, so if the two drift the toast either pops away mid-fade or sits
+  // invisible holding the tap target.
+  const TOAST_MS = 1700
 
   const showToast = useCallback((msg: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast(msg)
-    toastTimer.current = setTimeout(() => setToast(null), 2500)
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS)
   }, [])
 
   useEffect(() => {
@@ -147,6 +199,9 @@ function App() {
     // it goes across untranslated. Held as a digit-only string so the field can be cleared
     // while typing; an empty field submits as 0.
     extraGuests: '0',
+    // Counted separately from extraGuests because the hall bills a child plate differently,
+    // so the couple needs the split rather than one combined headcount.
+    children: '0',
     companionNames: '',
     meal: '예정',
     message: '',
@@ -188,31 +243,68 @@ function App() {
     }
   }, [])
 
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return
+    }
+    // Older Android WebViews and some in-app browsers (KakaoTalk among them) leave
+    // navigator.clipboard undefined. Reading .writeText off it would throw
+    // synchronously, so no toast would ever fire and the tap would look dead.
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    if (!ok) throw new Error('execCommand copy failed')
+  }, [])
+
   const copyAccount = useCallback(async (accountNumber: string) => {
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(accountNumber)
-      } else {
-        // Older Android WebViews and some in-app browsers (KakaoTalk among them) leave
-        // navigator.clipboard undefined. Reading .writeText off it would throw
-        // synchronously, so no toast would ever fire and the tap would look dead.
-        const ta = document.createElement('textarea')
-        ta.value = accountNumber
-        ta.setAttribute('readonly', '')
-        ta.style.position = 'fixed'
-        ta.style.opacity = '0'
-        document.body.appendChild(ta)
-        ta.select()
-        ta.setSelectionRange(0, accountNumber.length)
-        const ok = document.execCommand('copy')
-        document.body.removeChild(ta)
-        if (!ok) throw new Error('execCommand copy failed')
-      }
+      await copyToClipboard(accountNumber)
       showToast('계좌번호가 복사되었습니다.')
     } catch {
       showToast('복사에 실패했습니다. 계좌번호를 길게 눌러 복사해 주세요.')
     }
-  }, [showToast])
+  }, [copyToClipboard, showToast])
+
+  const copyShareLink = useCallback(async () => {
+    try {
+      // origin + pathname, not href: a guest who arrived on a link carrying ?utm= or a #hash
+      // would otherwise pass that tail along to everyone they share with.
+      await copyToClipboard(`${window.location.origin}${window.location.pathname}`)
+      showToast('청첩장 링크가 복사되었습니다.')
+    } catch {
+      showToast('복사에 실패했습니다. 주소창의 링크를 길게 눌러 복사해 주세요.')
+    }
+  }, [copyToClipboard, showToast])
+
+  const shareInvitation = useCallback(async () => {
+    // navigator.share needs a secure context, so it is undefined over plain http — including
+    // http://<LAN-IP>:5173 on a real phone. The button stays visible regardless and copies
+    // the link when the sheet is unavailable, rather than disappearing and looking broken.
+    if (!navigator.share) {
+      await copyShareLink()
+      return
+    }
+    try {
+      await navigator.share({
+        title: `${settings.mainNames} 결혼합니다`,
+        text: `${settings.mainDateText}\n${settings.mainLocationText}`,
+        url: `${window.location.origin}${window.location.pathname}`,
+      })
+    } catch (error) {
+      // A guest who backed out of the sheet decided not to share — falling through to copy
+      // the link would be an action they did not ask for. Anything else is a real failure.
+      if ((error as Error)?.name === 'AbortError') return
+      await copyShareLink()
+    }
+  }, [settings.mainNames, settings.mainDateText, settings.mainLocationText, copyShareLink])
 
   useEffect(() => {
     const target = new Date('2026-10-24T14:30:00+09:00').getTime()
@@ -230,19 +322,33 @@ function App() {
     return () => clearInterval(id)
   }, [])
 
+  // Re-run when settings arrive: a .fade-up that only exists once Firestore answers (an extra
+  // invitation paragraph, another 안내 block) was never picked up by a one-shot observer, and
+  // an unobserved .fade-up is stuck at opacity 0 — invisible for the rest of the visit.
   useEffect(() => {
-    const els = document.querySelectorAll<HTMLElement>('.fade-up')
+    const els = document.querySelectorAll<HTMLElement>('.fade-up:not(.is-visible)')
+    if (!els.length) return
     const obs = new IntersectionObserver(
       (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) e.target.classList.add('is-visible')
+        // Stagger whatever crosses the line together, so a section arrives as a cascade
+        // rather than one flat pop. Capped, or a fast scroll would queue a visible wait
+        // before the last element in a long batch showed up.
+        let step = 0
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          const el = entry.target as HTMLElement
+          el.style.transitionDelay = `${Math.min(step, 4) * 80}ms`
+          el.classList.add('is-visible')
+          step += 1
+          // Revealing is one-way, so stop watching rather than paying for every later scroll.
+          obs.unobserve(el)
         })
       },
       { threshold: 0.1 },
     )
     els.forEach((el) => obs.observe(el))
     return () => obs.disconnect()
-  }, [])
+  }, [settings])
 
   // `overflow: hidden` on body is a no-op on iOS Safari once the page is scrolled — the
   // background keeps scrolling behind the lightbox and the RSVP sheet. Pinning the body
@@ -264,7 +370,15 @@ function App() {
       body.style.left = ''
       body.style.right = ''
       body.style.width = ''
+      // Unpinning the body drops the page back to scroll 0, and `html` carries
+      // scroll-behavior: smooth — so restoring the position would *animate* from the top
+      // back down, which is exactly the scroll-to-top-then-glide-to-middle the guest sees
+      // on closing. Suppress the smoothing for this one jump.
+      const html = document.documentElement
+      const previousBehavior = html.style.scrollBehavior
+      html.style.scrollBehavior = 'auto'
       window.scrollTo(0, scrollY)
+      html.style.scrollBehavior = previousBehavior
     }
   }, [overlayOpen])
 
@@ -273,7 +387,7 @@ function App() {
   const openRsvp = useCallback(() => {
     setRsvpData({
       attendance: '참석', side: '신랑측', name: '', phone: '',
-      extraGuests: '0', companionNames: '', meal: '예정', message: '',
+      extraGuests: '0', children: '0', companionNames: '', meal: '예정', message: '',
     })
     setRsvpOpen(true)
   }, [])
@@ -287,6 +401,7 @@ function App() {
     // 본인 외, so 0 is both the default and a perfectly valid answer — nothing to validate.
     // An empty field means the guest cleared it and is coming alone.
     const extraGuests = attending ? Number(rsvpData.extraGuests || 0) : 0
+    const children = attending ? Number(rsvpData.children || 0) : 0
     setRsvpSubmitting(true)
     try {
       // A successful doPost answers 302 -> script.googleusercontent.com, and every hop carries
@@ -307,6 +422,7 @@ function App() {
           name: rsvpData.name.trim(),
           phone: rsvpData.phone.trim(),
           extraGuests,
+          children,
           companionNames: rsvpData.companionNames.trim(),
           meal: rsvpData.meal,
           message: rsvpData.message.trim(),
@@ -450,9 +566,7 @@ function App() {
             <div className="section-label">{settings.invitationLabel}</div>
             <div className="section-heading">{settings.invitationHeading}</div>
           </div>
-          <div className="section-body fade-up">
-            <Multiline text={settings.invitationBody} />
-          </div>
+          <Paragraphs text={settings.invitationBody} className="section-body" />
           <div className="invite-photo fade-up">
             <img
               src={settings.invitationPhoto}
@@ -619,18 +733,48 @@ function App() {
               <div className="section-heading">{settings.infoHeading}</div>
             </div>
             <div className="info-body fade-up">
-              {settings.infoBlocks.map((block, index) => (
-                <div className="info-block" key={`${block.title}-${index}`}>
-                  {block.title && <strong>{block.title}</strong>}
-                  <Multiline text={block.body} />
-                </div>
-              ))}
+              {settings.infoBlocks.map((block, index) => {
+                // Two blocks never collapse: one with no title, which would be an accordion
+                // with nothing to tap, and one the couple marked alwaysOpen — the short
+                // answers (지하철, 주차) that are not worth hiding behind a tap.
+                if (!block.title || block.alwaysOpen) {
+                  return (
+                    <div className="info-box info-box-open" key={`open-${index}`}>
+                      {block.title && <div className="info-static-title">{block.title}</div>}
+                      <div className="info-panel info-panel-static">
+                        <InfoBody text={block.body} />
+                      </div>
+                    </div>
+                  )
+                }
+                const open = !!openInfo[index]
+                return (
+                  <div className="info-box" key={`${block.title}-${index}`}>
+                    <button
+                      type="button"
+                      className="info-btn"
+                      aria-expanded={open}
+                      onClick={() => setOpenInfo((prev) => ({ ...prev, [index]: !prev[index] }))}
+                    >
+                      <span>{block.title}</span>
+                      <svg className={`acct-arrow ${open ? 'acct-arrow-open' : ''}`} viewBox="0 0 24 24">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    {open && (
+                      <div className="info-panel">
+                        <InfoBody text={block.body} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </section>
         )}
 
         {/* Thanks To */}
-        <section className="section-wrap">
+        <section className="section-wrap tint-bg">
           <div className="fade-up">
             <div className="section-label">{settings.thanksLabel}</div>
             <div className="section-heading">{settings.thanksHeading}</div>
@@ -693,6 +837,23 @@ function App() {
           </div>
         </section>
 
+        {/* Share */}
+        <section className="section-wrap tint-bg">
+          <div className="fade-up">
+            <div className="section-label">SHARE</div>
+            <div className="section-heading">청첩장 공유하기</div>
+          </div>
+          <hr className="rsvp-divider" />
+          <div className="share-btns fade-up">
+            <button type="button" className="share-btn share-primary" onClick={shareInvitation}>
+              공유하기
+            </button>
+            <button type="button" className="share-btn share-copy" onClick={copyShareLink}>
+              링크 복사하기
+            </button>
+          </div>
+        </section>
+
         {/* Ending Photo */}
         <section className="ending-photo">
           <img
@@ -722,7 +883,7 @@ function App() {
             rel="noopener noreferrer"
             className="footer-heart"
           >
-            ♥
+            🤍
           </a>
         </footer>
         </main>
@@ -747,7 +908,7 @@ function App() {
                           opt === '불참'
                             // A decline carries no headcount: clear the fields we are about to hide,
                             // or their stale values would still be submitted.
-                            ? { ...d, attendance: opt, extraGuests: '0', companionNames: '', meal: '해당없음' }
+                            ? { ...d, attendance: opt, extraGuests: '0', children: '0', companionNames: '', meal: '해당없음' }
                             : { ...d, attendance: opt, meal: '예정' }
                         ))}
                       >
@@ -797,6 +958,18 @@ function App() {
                         onChange={(e) => setRsvpData((d) => ({ ...d, extraGuests: e.target.value.replace(/[^0-9]/g, '') }))}
                       />
                     </li>
+                    <li>
+                      <p className="gb-form-label">아이 10세 이하 (본인 외)</p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={2}
+                        className="gb-input"
+                        placeholder="없으면 0"
+                        value={rsvpData.children}
+                        onChange={(e) => setRsvpData((d) => ({ ...d, children: e.target.value.replace(/[^0-9]/g, '') }))}
+                      />
+                    </li>
                     {Number(rsvpData.extraGuests) > 0 && (
                       <li>
                         <p className="gb-form-label">동반 인원 성함</p>
@@ -823,7 +996,7 @@ function App() {
                 </li>
               </ul>
               <button type="button" className="gb-submit-btn" disabled={rsvpSubmitting} onClick={handleRsvpSubmit}>
-                {rsvpSubmitting ? '전송 중...' : '제출하기'}
+                {rsvpSubmitting ? '전송 중...' : '참석 정보 전달하기'}
               </button>
             </div>
           </div>
@@ -839,13 +1012,17 @@ function App() {
             onTouchStart={onLightboxTouchStart}
             onTouchEnd={onLightboxTouchEnd}
           >
-            <button type="button" className="lb-arrow lb-prev" onClick={prevSlide} aria-label="이전 사진">&lsaquo;</button>
+            <button type="button" className="lb-arrow lb-prev" onClick={prevSlide} aria-label="이전 사진">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.5 12 15 19.5" /></svg>
+            </button>
             <img
               className="lb-image"
               src={galleryPhotos[activeLightbox]}
               alt={`사진 ${activeLightbox + 1}`}
             />
-            <button type="button" className="lb-arrow lb-next" onClick={nextSlide} aria-label="다음 사진">&rsaquo;</button>
+            <button type="button" className="lb-arrow lb-next" onClick={nextSlide} aria-label="다음 사진">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 16.5 12 9 19.5" /></svg>
+            </button>
           </div>
           <div className="lb-thumbs" onClick={(e) => e.stopPropagation()}>
             {galleryPhotos.map((src, i) => (
