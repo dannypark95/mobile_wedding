@@ -265,9 +265,15 @@ export default function AdminPanel({
   // used to stand in for it, which drifts: the token expires or is cleared and the panel still
   // renders the full editor, so every save fails with a generic "저장에 실패했어요" and no hint
   // that the real problem is a lost session. Ask Firebase and follow it.
-  const [authed, setAuthed] = useState(() => auth.currentUser !== null)
+  // Matched against the admin address, not merely "someone is signed in". Email/password
+  // self-signup is open by default and the API key ships in the bundle, so a stranger can mint
+  // an account and land here holding a session. firestore.rules and storage.rules pin writes to
+  // this same address, so nothing they did could be saved — but they would be looking at the
+  // full editor pre-filled with the couple's details, and every save would fail obscurely.
+  const isAdminAccount = (user: { email: string | null } | null) => user?.email === ADMIN_EMAIL
+  const [authed, setAuthed] = useState(() => isAdminAccount(auth.currentUser))
 
-  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(user !== null)), [])
+  useEffect(() => onAuthStateChanged(auth, (user) => setAuthed(isAdminAccount(user))), [])
   const [draggingGalleryIndex, setDraggingGalleryIndex] = useState<number | null>(null)
   const [galleryDropIndex, setGalleryDropIndex] = useState<number | null>(null)
   const [cropEditor, setCropEditor] = useState<CropEditorState | null>(null)

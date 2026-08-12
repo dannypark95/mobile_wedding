@@ -1118,12 +1118,13 @@
   /* Expo-out rather than plain ease: it covers most of the distance early and settles, which
      reads as motion easing to a stop instead of gliding at a constant rate. */
   transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
+  /* No will-change here on purpose: it promoted all 24 not-yet-revealed blocks to their own
+     compositor layer at load, which is real memory on the older phones this audience carries.
+     opacity and transform are composited anyway, so the hint bought nothing. */
 }
 .fade-up.is-visible {
   opacity: 1;
   transform: translateY(0);
-  will-change: auto;
 }
 /* Paragraphs of one passage, split so each reveals on its own — they need the gap the blank
    line used to provide when they were a single block. */
