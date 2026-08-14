@@ -136,6 +136,27 @@ function Multiline({ text }: { text: string }) {
 }
 
 /**
+ * '박 영 준' and '김미경' are the same kind of value typed two different ways — one spelled out
+ * with spaces for the airy look Korean invitations use, one not — and set side by side the two
+ * rows visibly disagree. The spacing is typography, so it belongs to the stylesheet: strip the
+ * hand-typed spaces and let letter-spacing do it evenly, whatever the couple types later.
+ *
+ * Only a run of single syllables collapses. '차재동 · 지미숙' keeps its separator, and
+ * '박영준 이영희' is two names rather than one spelled out, so its space is real and stays.
+ */
+function tightenName(value: string) {
+  return value
+    .split('·')
+    .map((part) => {
+      const tokens = part.trim().split(/\s+/).filter(Boolean)
+      return tokens.length > 1 && tokens.every((token) => /^[가-힣]$/.test(token))
+        ? tokens.join('')
+        : part.trim()
+    })
+    .join(' · ')
+}
+
+/**
  * One honju line, as three cells rather than a sentence: the parents, then 의 아들 / 의 딸, then
  * the child. The grid in App.css shares its column widths across both rows, so the relation and
  * the names line up vertically however long either set of parents' names happens to be.
@@ -145,9 +166,10 @@ function HonjuRow({ parents, relation, name }: { parents: string; relation: stri
   if (!parents && !relation && !name) return null
   return (
     <div className="honju-row">
-      <span className="honju-parents">{parents}</span>
+      {/* The relation is left alone: '의 아들' is two words, and its space is the language. */}
+      <span className="honju-parents">{tightenName(parents)}</span>
       <span className="honju-relation">{relation}</span>
-      <span className="honju-name">{name}</span>
+      <span className="honju-name">{tightenName(name)}</span>
     </div>
   )
 }

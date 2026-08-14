@@ -1421,7 +1421,9 @@
 .honju-name {
   font-size: 17px;
   color: var(--c-black);
-  letter-spacing: 0.12em;
+  /* Wider than the rest of the line: this is where the hand-typed spaces used to do the work,
+     and tightenName in App.tsx has just taken them away. */
+  letter-spacing: 0.2em;
 }
 .honju-child {
   font-size: 15px;
