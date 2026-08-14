@@ -11,8 +11,14 @@
     <meta name="description" content="2026. 10. 24 토요일 오후 2:30 · 부산 센텀호텔" />
     <meta name="theme-color" content="#ffffff" />
 
-    <link rel="icon" type="image/png" href="/icon.png" />
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- The S·Y monogram. The SVG carries its letterforms as outlines rather than a font
+         reference, so it needs no webfont and stays crisp at every size a tab or bookmark
+         asks for; the PNG is the fallback for browsers that will not take an SVG favicon.
+         apple-touch-icon is a separate, full-bleed file because iOS rounds the corners
+         itself — handing it the already-rounded artwork rounds them twice. -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="180x180" href="/icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="박성현 ♥ 배예은 결혼합니다" />

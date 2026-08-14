@@ -38,3 +38,6 @@ img/**/화면 캡처*
 
 # Full-resolution photo originals (kept locally, not shipped to guests)
 img-originals/
+
+# Downloaded font used to outline the monogram; public/icon.svg is the committed result
+.cache/
