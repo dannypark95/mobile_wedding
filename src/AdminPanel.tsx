@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ChangeEvent, type Dispatch, type PointerEvent, type SetStateAction } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { getDownloadURL, listAll, ref, updateMetadata, uploadBytes, type StorageReference } from 'firebase/storage'
 
 import { auth, db, storage } from './firebase'
 import {
@@ -147,11 +147,18 @@ function resizeImage(file: File, maxSize = 1800, quality = 0.82) {
   })
 }
 
+// Firebase Storage defaults every object to `Cache-Control: private, max-age=0`, so a guest
+// re-downloaded every photo on the invitation on every single visit — the gallery alone is
+// ~7 MB, over Korean mobile data, for pictures they had already been sent. Every name here is
+// prefixed with Date.now() and a replaced photo is a new object at a new name, so these bytes
+// genuinely never change and can be cached for as long as the browser likes.
+const PHOTO_CACHE_CONTROL = 'public, max-age=31536000, immutable'
+
 async function uploadImageFile(file: File, folder: string) {
   const blob = await resizeImage(file)
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')
   const imageRef = ref(storage, `wedding/${folder}/${Date.now()}-${safeName}`)
-  await uploadBytes(imageRef, blob, { contentType: 'image/jpeg' })
+  await uploadBytes(imageRef, blob, { contentType: 'image/jpeg', cacheControl: PHOTO_CACHE_CONTROL })
   const url = await getDownloadURL(imageRef)
   // Pull the uploaded copy down before anything renders it. Pointing an <img> at a URL the
   // browser has never fetched empties the slot until the download lands, which reads as the
@@ -365,6 +372,30 @@ export default function AdminPanel({
     setDraggingGalleryIndex(null)
     setGalleryDropIndex(null)
   }, [moveGalleryPhoto])
+
+  // Every photo uploaded before PHOTO_CACHE_CONTROL existed still carries Storage's default
+  // `private, max-age=0`, and that header lives on the object rather than in this code — so the
+  // ~35 already in the bucket stay uncacheable until something rewrites their metadata. Only
+  // the admin account is allowed to, which is exactly who is looking at this button.
+  const [cacheFixing, setCacheFixing] = useState(false)
+  const backfillPhotoCache = useCallback(async () => {
+    setCacheFixing(true)
+    try {
+      const found: StorageReference[] = []
+      // listAll is one level deep, and the photos sit under wedding/<key>/ — so walk the tree.
+      const walk = async (folder: StorageReference) => {
+        const listing = await listAll(folder)
+        found.push(...listing.items)
+        await Promise.all(listing.prefixes.map(walk))
+      }
+      await walk(ref(storage, 'wedding'))
+      await Promise.all(found.map((item) => updateMetadata(item, { cacheControl: PHOTO_CACHE_CONTROL })))
+      showToast(`사진 ${found.length}장이 이제 브라우저에 저장됩니다. 다시 누르지 않아도 돼요.`)
+    } catch {
+      showToast('캐시 설정 변경에 실패했어요. 로그인과 Storage 권한을 확인해주세요.')
+    }
+    setCacheFixing(false)
+  }, [showToast])
 
   const saveSection = useCallback(async (label: string) => {
     try {
@@ -651,6 +682,16 @@ export default function AdminPanel({
           ))}
         </div>
         <button type="button" className="admin-section-save" onClick={() => saveSection('갤러리')}>갤러리 변경사항 저장</button>
+
+        <h3>사진 캐시</h3>
+        <p className="admin-note">
+          예전에 올린 사진들은 하객이 청첩장을 열 때마다 매번 새로 내려받고 있어요(갤러리만 약 7MB).
+          아래 버튼을 <strong>한 번만</strong> 누르면 한 번 받은 사진은 휴대폰에 저장되어 다음부터 훨씬 빨라집니다.
+          앞으로 새로 올리는 사진은 자동으로 적용되니 다시 누르지 않아도 됩니다.
+        </p>
+        <button type="button" className="admin-secondary" disabled={cacheFixing} onClick={backfillPhotoCache}>
+          {cacheFixing ? '변경 중…' : '기존 사진 캐시 설정하기'}
+        </button>
       </section>}
 
       {activeSection === 'location' && <section className="admin-section">
