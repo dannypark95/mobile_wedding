@@ -177,13 +177,16 @@ function tightenName(value: string) {
 function HonjuRow({ parents, relation, name }: { parents: string; relation: string; name: string }) {
   // A side the couple blanked entirely should take no space rather than leave an empty row.
   if (!parents && !relation && !name) return null
+  // A fragment, not a wrapper: the three cells are direct children of the grid. They used to sit
+  // in a <div display:contents>, which iOS in-app browsers render inconsistently — dropping the
+  // row into a single track, where '의 아들' and the name wrapped mid-word.
   return (
-    <div className="honju-row">
+    <>
       {/* The relation is left alone: '의 아들' is two words, and its space is the language. */}
       <span className="honju-parents">{tightenName(parents)}</span>
       <span className="honju-relation">{relation}</span>
       <span className="honju-name">{tightenName(name)}</span>
-    </div>
+    </>
   )
 }
 
@@ -1134,6 +1137,18 @@ function App() {
               </li>
             ))}
           </ul>
+          {/* Directly under the last entry, and quiet: it continues the list rather than being
+              an action of its own, so it should not compete with 작성하기 below. */}
+          {gbEntries.length > GUESTBOOK_PAGE_SIZE && (
+            <button
+              type="button"
+              className={`gb-more fade-up ${gbExpanded ? 'gb-more-open' : ''}`}
+              onClick={() => setGbExpanded((open) => !open)}
+            >
+              {gbExpanded ? '접기' : `더 보기 ${gbEntries.length - GUESTBOOK_PAGE_SIZE}개`}
+              <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          )}
           <div className="gb-buttons fade-up">
             <button
               type="button"
@@ -1142,11 +1157,6 @@ function App() {
             >
               작성하기
             </button>
-            {gbEntries.length > GUESTBOOK_PAGE_SIZE && (
-              <button type="button" className="gb-more-btn" onClick={() => setGbExpanded((open) => !open)}>
-                {gbExpanded ? '접기' : `더 보기 (${gbEntries.length - GUESTBOOK_PAGE_SIZE})`}
-              </button>
-            )}
           </div>
         </section>
 

@@ -1455,8 +1455,12 @@
   column-gap: 18px;
   text-align: left;
 }
-.honju-row {
-  display: contents;
+/* Korean breaks between any two syllables, so a track even a pixel short of its content splits
+   '의 아들' into '의 아 / 들'. The cells are one unit each — never wrapped. */
+.honju-parents,
+.honju-relation,
+.honju-name {
+  white-space: nowrap;
 }
 .honju-parents {
   justify-self: end;
@@ -2031,19 +2035,38 @@
 .gb-write-btn:active {
   opacity: 0.85;
 }
-.gb-more-btn {
-  display: block;
-  width: calc(100% - 136px);
-  padding: 14px 0;
-  background: var(--c-white);
-  color: var(--c-main);
-  border: 1px solid var(--c-main);
+/* A quiet continuation of the list, not a second call to action beside 작성하기 — no border,
+   no fill, just the label and a chevron sitting under the last entry. */
+.gb-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 10px 8px;
+  border: none;
+  background: none;
+  color: var(--c-main70);
   font-family: var(--ff-body);
-  font-size: 14px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
   cursor: pointer;
 }
-.gb-more-btn:active {
-  background: #f5f5f5;
+.gb-more svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.25s ease;
+}
+.gb-more-open svg {
+  transform: rotate(180deg);
+}
+.gb-more:active {
+  color: var(--c-main);
 }
 
 /* Guest Book Modals */
