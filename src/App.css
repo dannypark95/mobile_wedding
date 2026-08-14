@@ -1064,7 +1064,7 @@
   flex-direction: column;
   align-items: center;
 }
-/* The four delays and this duration set when the last line lands (520 + 750 = ~1.27s), which
+/* The four delays and this duration set when the last line lands (430 + 620 = ~1.05s), which
    INTRO_MIN_MS in App.tsx is chosen against so 초대합니다 sits complete for a beat before the
    curtain lifts rather than still rising into it. Change one, check the other. */
 .intro-date,
@@ -1072,7 +1072,7 @@
 .intro-rule,
 .intro-sub {
   opacity: 0;
-  animation: introRise 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: introRise 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .intro-date {
   font-family: var(--ff);
@@ -1080,7 +1080,7 @@
   letter-spacing: 0.25em;
   color: var(--c-main70);
   margin: 0;
-  animation-delay: 60ms;
+  animation-delay: 40ms;
 }
 .intro-names {
   font-family: var(--ff);
@@ -1088,14 +1088,14 @@
   letter-spacing: 0.12em;
   color: var(--c-black);
   margin: 16px 0 0;
-  animation-delay: 200ms;
+  animation-delay: 160ms;
 }
 .intro-rule {
   width: 34px;
   height: 1px;
   background: var(--c-main40);
   margin: 20px 0;
-  animation-delay: 380ms;
+  animation-delay: 300ms;
 }
 .intro-sub {
   font-family: var(--ff);
@@ -1103,7 +1103,7 @@
   letter-spacing: 0.18em;
   color: var(--c-main70);
   margin: 0;
-  animation-delay: 520ms;
+  animation-delay: 430ms;
 }
 @keyframes introRise {
   from { opacity: 0; transform: translateY(12px); }
@@ -1210,6 +1210,16 @@
 .fade-up.is-visible {
   opacity: 1;
   transform: translateY(0);
+}
+/* The hero is the one block that arrives the moment the intro lifts, and it is a whole screen
+   of photograph rather than a line of text — at the shared 0.75s it snapped into place just as
+   the curtain got out of the way. Twice the time, and a shorter distance to travel, so it
+   settles rather than jumps. */
+.hero .fade-up {
+  transition-duration: 1.5s;
+}
+.hero .fade-up:not(.is-visible) {
+  transform: translateY(16px);
 }
 /* Paragraphs of one passage, split so each reveals on its own — they need the gap the blank
    line used to provide when they were a single block. */

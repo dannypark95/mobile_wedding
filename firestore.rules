@@ -19,5 +19,29 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // The 방명록. Guests have no account, so create has to be open — which makes the shape
+    // check the only thing standing between this collection and someone writing whatever they
+    // like into it. Fields are pinned by name, type and length so an entry cannot become a
+    // payload, and update is closed entirely: an entry is written once and then only deleted.
+    //
+    // Delete stays open because the password guarding an entry is checked on the client, and
+    // rules cannot see what the guest typed. It is a deterrent against a guest deleting someone
+    // else's message by accident, not a defence against someone determined to clear the book —
+    // for that, the couple has the Firestore console.
+    match /guestbook/{entry} {
+      function isEntry(data) {
+        return data.keys().hasOnly(['name', 'message', 'passwordHash', 'createdAt'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 20
+          && data.message is string && data.message.size() > 0 && data.message.size() <= 100
+          && data.passwordHash is string && data.passwordHash.size() > 0 && data.passwordHash.size() <= 80
+          && data.createdAt is timestamp;
+      }
+
+      allow read: if true;
+      allow create: if isEntry(request.resource.data);
+      allow update: if false;
+      allow delete: if true;
+    }
   }
 }

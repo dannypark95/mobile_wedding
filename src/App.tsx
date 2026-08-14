@@ -8,6 +8,18 @@ import bgMusicMp3 from '../music/bgm.mp3'
 
 import './App.css'
 import {
+  addGuestbookEntry,
+  deleteGuestbookEntry,
+  fetchGuestbook,
+  formatEntryDate,
+  matchesPassword,
+  GUESTBOOK_MESSAGE_MAX,
+  GUESTBOOK_NAME_MAX,
+  GUESTBOOK_PAGE_SIZE,
+  GUESTBOOK_PASSWORD_MAX,
+  type GuestbookEntry,
+} from './guestbook'
+import {
   cacheSettings,
   cropStyle,
   defaultSettings,
@@ -57,9 +69,9 @@ function introPhrase(now: Date) {
 // The intro holds until the hero photo is settled, so it doubles as the cover over that load
 // rather than being dead time bolted in front of it. heroReady is guaranteed within
 // HERO_SETTINGS_DEADLINE_MS, so this needs no separate escape hatch.
-// The last line lands at ~1.27s (see the stagger in App.css), so this leaves it complete and
-// still for roughly the same again before the fade starts.
-const INTRO_MIN_MS = 2100
+// The last line lands at ~1.05s (see the stagger in App.css); this leaves it whole for a beat
+// before the fade starts, without holding the invitation back longer than a greeting warrants.
+const INTRO_MIN_MS = 1500
 const INTRO_MIN_REDUCED_MS = 500
 // Keep in step with the .intro transition in App.css: this unmounts the overlay, and if it
 // fires early the intro pops rather than fades.
@@ -287,6 +299,69 @@ function App() {
   // would immediately restart the audio the guest just silenced.
   const musicMutedByUser = useRef(false)
 
+  const [gbEntries, setGbEntries] = useState<GuestbookEntry[]>([])
+  const [gbExpanded, setGbExpanded] = useState(false)
+  const [gbWriteOpen, setGbWriteOpen] = useState(false)
+  const [gbDeleteId, setGbDeleteId] = useState<string | null>(null)
+  const [gbDeletePassword, setGbDeletePassword] = useState('')
+  const [gbSubmitting, setGbSubmitting] = useState(false)
+  const [gbForm, setGbForm] = useState({ name: '', password: '', message: '' })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchGuestbook(controller.signal)
+      .then(setGbEntries)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        // The 방명록 is one section of a page that is complete without it, so a failed read
+        // leaves it empty rather than alarming a guest who only came for the address.
+        console.warn('Could not load the guestbook.', error)
+      })
+    return () => controller.abort()
+  }, [])
+
+  const submitGuestbookEntry = useCallback(async () => {
+    const name = gbForm.name.trim()
+    const message = gbForm.message.trim()
+    if (!name || !message || !gbForm.password.trim()) {
+      showToast('성함, 비밀번호, 내용을 모두 입력해 주세요.')
+      return
+    }
+    setGbSubmitting(true)
+    try {
+      const created = await addGuestbookEntry({ name, message, password: gbForm.password })
+      // Put it straight at the top rather than refetching: the list is already sorted newest
+      // first, and a round trip here would leave the guest looking at their own entry missing.
+      setGbEntries((current) => [created, ...current])
+      setGbForm({ name: '', password: '', message: '' })
+      setGbWriteOpen(false)
+      showToast('방명록이 등록되었습니다. 감사합니다.')
+    } catch {
+      showToast('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    }
+    setGbSubmitting(false)
+  }, [gbForm, showToast])
+
+  const confirmGuestbookDelete = useCallback(async () => {
+    const entry = gbEntries.find((candidate) => candidate.id === gbDeleteId)
+    if (!entry) return
+    if (!await matchesPassword(entry, gbDeletePassword)) {
+      showToast('비밀번호가 일치하지 않습니다.')
+      return
+    }
+    setGbSubmitting(true)
+    try {
+      await deleteGuestbookEntry(entry.id)
+      setGbEntries((current) => current.filter((candidate) => candidate.id !== entry.id))
+      setGbDeleteId(null)
+      setGbDeletePassword('')
+      showToast('방명록이 삭제되었습니다.')
+    } catch {
+      showToast('삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    }
+    setGbSubmitting(false)
+  }, [gbDeleteId, gbDeletePassword, gbEntries, showToast])
+
   const [rsvpOpen, setRsvpOpen] = useState(false)
   const [rsvpSubmitting, setRsvpSubmitting] = useState(false)
   const [rsvpData, setRsvpData] = useState({
@@ -311,19 +386,20 @@ function App() {
       audioRef.current?.pause()
       return
     }
+    // No browser will start audible sound without a gesture, so the best available behaviour is
+    // to be listening for the earliest possible one and start on it. scroll used to be the
+    // likeliest first event, but the intro pins the body for its first second and a pinned body
+    // fires no scroll — pointerdown covers the tap that dismisses it, on mouse and touch alike.
+    const UNLOCK_EVENTS = ['pointerdown', 'touchstart', 'click', 'keydown', 'scroll'] as const
     const stopListening = () => {
-      document.removeEventListener('click', tryPlay)
-      document.removeEventListener('touchstart', tryPlay)
-      document.removeEventListener('scroll', tryPlay)
+      UNLOCK_EVENTS.forEach((event) => document.removeEventListener(event, tryPlay))
     }
     const tryPlay = () => {
       const audio = audioRef.current
       if (!audio || musicMutedByUser.current) return
       audio.play().then(stopListening).catch(() => {})
     }
-    document.addEventListener('click', tryPlay)
-    document.addEventListener('touchstart', tryPlay)
-    document.addEventListener('scroll', tryPlay)
+    UNLOCK_EVENTS.forEach((event) => document.addEventListener(event, tryPlay, { passive: true }))
     tryPlay()
     return stopListening
   }, [isAdminView])
@@ -457,7 +533,7 @@ function App() {
   // background keeps scrolling behind the lightbox and the RSVP sheet. Pinning the body
   // with position:fixed is the technique that actually holds, but it resets scroll
   // position, so we restore it on close.
-  const overlayOpen = lightbox !== null || rsvpOpen || !introDone
+  const overlayOpen = lightbox !== null || rsvpOpen || gbWriteOpen || gbDeleteId !== null || !introDone
   useEffect(() => {
     if (!overlayOpen) return
     const scrollY = window.scrollY
@@ -593,11 +669,14 @@ function App() {
       )}
       {/* Two sources, one download: the browser picks the first it can play. AAC-LC at 64 kbps
           mono beats MP3 at the same bitrate and every mobile browser supports it, but the MP3
-          stays as a fallback so nothing can leave a guest with a silent page. */}
+          stays as a fallback so nothing can leave a guest with a silent page.
+          preload is metadata rather than none so the track is ready the instant the first
+          gesture lands — with none, the guest taps and the music starts a beat later, after a
+          cold fetch. */}
       <audio
         ref={audioRef}
         loop
-        preload="none"
+        preload="metadata"
         onPlay={() => setMusicPlaying(true)}
         onPause={() => setMusicPlaying(false)}
       >
@@ -950,6 +1029,54 @@ function App() {
           </div>
         </section>
 
+        {/* Guest Book */}
+        <section className="section-wrap gb-section">
+          <div className="fade-up">
+            <div className="section-label">GUEST BOOK</div>
+            <div className="section-heading">방명록</div>
+          </div>
+          <hr className="rsvp-divider" />
+          <div className="rsvp-body fade-up">
+            따뜻한 마음으로 축복해 주세요.
+          </div>
+          <ul className="gb-list fade-up">
+            {gbEntries.length === 0 && (
+              <li className="gb-entry gb-empty">첫번째 방명록을 남겨주세요.</li>
+            )}
+            {(gbExpanded ? gbEntries : gbEntries.slice(0, GUESTBOOK_PAGE_SIZE)).map((entry) => (
+              <li className="gb-entry" key={entry.id}>
+                <h3 className="gb-author">
+                  {entry.name}
+                  <button
+                    type="button"
+                    className="gb-del-btn"
+                    onClick={() => { setGbDeletePassword(''); setGbDeleteId(entry.id) }}
+                    aria-label={`${entry.name}님의 방명록 삭제`}
+                  >
+                    &times;
+                  </button>
+                </h3>
+                <p className="gb-message">{entry.message}</p>
+                <span className="gb-date">{formatEntryDate(entry.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="gb-buttons fade-up">
+            <button
+              type="button"
+              className="gb-write-btn"
+              onClick={() => { setGbForm({ name: '', password: '', message: '' }); setGbWriteOpen(true) }}
+            >
+              작성하기
+            </button>
+            {gbEntries.length > GUESTBOOK_PAGE_SIZE && (
+              <button type="button" className="gb-more-btn" onClick={() => setGbExpanded((open) => !open)}>
+                {gbExpanded ? '접기' : `더 보기 (${gbEntries.length - GUESTBOOK_PAGE_SIZE})`}
+              </button>
+            )}
+          </div>
+        </section>
+
         {/* Share */}
         <section className="section-wrap tint-bg">
           <div className="fade-up">
@@ -1115,6 +1242,81 @@ function App() {
           </div>
         </div>
       )}
+      {/* Guest Book — write */}
+      {gbWriteOpen && (
+        <div className="gb-overlay" onClick={() => setGbWriteOpen(false)}>
+          <div className="gb-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="gb-modal-close" onClick={() => setGbWriteOpen(false)}>&times;</button>
+            <div className="gb-modal-body">
+              <ul className="gb-form">
+                <li>
+                  <p className="gb-form-label">성함</p>
+                  <input
+                    type="text"
+                    className="gb-input"
+                    maxLength={GUESTBOOK_NAME_MAX}
+                    placeholder="본인 성함 입력"
+                    value={gbForm.name}
+                    onChange={(event) => setGbForm((form) => ({ ...form, name: event.target.value }))}
+                  />
+                </li>
+                <li>
+                  <p className="gb-form-label">비밀번호</p>
+                  <input
+                    type="password"
+                    className="gb-input"
+                    maxLength={GUESTBOOK_PASSWORD_MAX}
+                    placeholder={`삭제할 때 필요해요 (최대 ${GUESTBOOK_PASSWORD_MAX}자리)`}
+                    value={gbForm.password}
+                    onChange={(event) => setGbForm((form) => ({ ...form, password: event.target.value }))}
+                  />
+                </li>
+                <li>
+                  <p className="gb-form-label">내용</p>
+                  <textarea
+                    className="gb-textarea"
+                    maxLength={GUESTBOOK_MESSAGE_MAX}
+                    placeholder={`최대 ${GUESTBOOK_MESSAGE_MAX}자까지 입력`}
+                    value={gbForm.message}
+                    onChange={(event) => setGbForm((form) => ({ ...form, message: event.target.value }))}
+                  />
+                </li>
+              </ul>
+              <button type="button" className="gb-submit-btn" disabled={gbSubmitting} onClick={submitGuestbookEntry}>
+                {gbSubmitting ? '등록 중...' : '남기기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guest Book — delete */}
+      {gbDeleteId !== null && (
+        <div className="gb-overlay" onClick={() => setGbDeleteId(null)}>
+          <div className="gb-modal gb-modal-sm" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="gb-modal-close" onClick={() => setGbDeleteId(null)}>&times;</button>
+            <div className="gb-modal-body">
+              <ul className="gb-form">
+                <li>
+                  <p className="gb-form-label">비밀번호</p>
+                  <input
+                    type="password"
+                    className="gb-input"
+                    maxLength={GUESTBOOK_PASSWORD_MAX}
+                    placeholder="작성할 때 입력한 비밀번호"
+                    value={gbDeletePassword}
+                    onChange={(event) => setGbDeletePassword(event.target.value)}
+                  />
+                </li>
+              </ul>
+              <button type="button" className="gb-submit-btn" disabled={gbSubmitting} onClick={confirmGuestbookDelete}>
+                {gbSubmitting ? '삭제 중...' : '삭제하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lightbox */}
       {activeLightbox !== null && (
         <div className="lightbox-overlay" onClick={closeLightbox}>
@@ -1156,7 +1358,13 @@ function App() {
           aria-hidden because every word of it appears again in the hero directly underneath;
           announcing it would just read the couple's names twice. */}
       {!introDone && (
-        <div className={`intro ${introLeaving ? 'intro-leaving' : ''}`} aria-hidden="true">
+        <div
+          className={`intro ${introLeaving ? 'intro-leaving' : ''}`}
+          aria-hidden="true"
+          // A guest who has already read it can tap straight through. The same tap is the
+          // gesture the audio has been waiting for, so the music starts on it too.
+          onClick={() => setIntroLeaving(true)}
+        >
           <div className="intro-inner">
             <p className="intro-date">{INTRO_DATE_TEXT}</p>
             <p className="intro-names">{settings.mainNames}</p>
