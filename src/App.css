@@ -1039,6 +1039,45 @@
   }
 }
 
+/* ── Guest book ⋯ menu ── */
+.gb-menu-wrap {
+  position: relative;
+  margin-left: auto;
+  display: inline-flex;
+}
+.gb-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 96px;
+  background: var(--c-white);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.gb-menu button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--ff-body);
+  font-size: 13px;
+  color: var(--c-black70);
+  /* 44px so it clears the minimum touch target — this menu sits under a thumb. */
+  min-height: 44px;
+  padding: 0 18px;
+  text-align: left;
+}
+.gb-menu button + button {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+.gb-menu button:active {
+  background: var(--c-main03);
+}
+
 /* ── Intro ── */
 .intro {
   position: fixed;

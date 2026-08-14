@@ -20,17 +20,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // The 방명록. Guests have no account, so create has to be open — which makes the shape
-    // check the only thing standing between this collection and someone writing whatever they
-    // like into it. Fields are pinned by name, type and length so an entry cannot become a
-    // payload, and update is closed entirely: an entry is written once and then only deleted.
+    // The 방명록. Guests have no account, so the password each author sets is what says an entry
+    // is theirs, and the ⋯ menu checks it on the client before editing or deleting. Rules cannot
+    // see what was typed, so create, update and delete all have to stay open to anyone — which
+    // makes these shape checks the only thing standing between this collection and someone
+    // writing whatever they like into it.
     //
-    // Delete stays open because the password guarding an entry is checked on the client, and
-    // rules cannot see what the guest typed. It is a deterrent against a guest deleting someone
-    // else's message by accident, not a defence against someone determined to clear the book —
-    // for that, the couple has the Firestore console.
+    // What that buys: an entry cannot become a payload, and — the part that matters — an update
+    // cannot change passwordHash or createdAt. Without that, anyone could PATCH a new password
+    // onto someone else's entry and own it outright.
     match /guestbook/{entry} {
-      function isEntry(data) {
+      function isNewEntry(data) {
         return data.keys().hasOnly(['name', 'message', 'passwordHash', 'createdAt'])
           && data.name is string && data.name.size() > 0 && data.name.size() <= 20
           && data.message is string && data.message.size() > 0 && data.message.size() <= 100
@@ -38,9 +38,21 @@ service cloud.firestore {
           && data.createdAt is timestamp;
       }
 
+      // Looser than isNewEntry because it also has to accept the four entries written by the
+      // first version, which carry `content` and a plaintext `password` and would fail a
+      // hasOnly() naming only the current fields.
+      function isEditOf(next, previous) {
+        return next.get('passwordHash', '') == previous.get('passwordHash', '')
+          && next.get('password', '') == previous.get('password', '')
+          && next.createdAt == previous.createdAt
+          && next.keys().hasOnly(['name', 'message', 'content', 'passwordHash', 'password', 'createdAt'])
+          && next.name is string && next.name.size() > 0 && next.name.size() <= 20
+          && next.message is string && next.message.size() > 0 && next.message.size() <= 100;
+      }
+
       allow read: if true;
-      allow create: if isEntry(request.resource.data);
-      allow update: if false;
+      allow create: if isNewEntry(request.resource.data);
+      allow update: if isEditOf(request.resource.data, resource.data);
       allow delete: if true;
     }
   }

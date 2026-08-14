@@ -10,6 +10,7 @@ import './App.css'
 import {
   addGuestbookEntry,
   deleteGuestbookEntry,
+  updateGuestbookEntry,
   fetchGuestbook,
   formatEntryDate,
   matchesPassword,
@@ -302,10 +303,15 @@ function App() {
   const [gbEntries, setGbEntries] = useState<GuestbookEntry[]>([])
   const [gbExpanded, setGbExpanded] = useState(false)
   const [gbWriteOpen, setGbWriteOpen] = useState(false)
-  const [gbDeleteId, setGbDeleteId] = useState<string | null>(null)
-  const [gbDeletePassword, setGbDeletePassword] = useState('')
   const [gbSubmitting, setGbSubmitting] = useState(false)
   const [gbForm, setGbForm] = useState({ name: '', password: '', message: '' })
+  // Which entry's ⋯ menu is open, and what that menu is asking for. `action` null means the
+  // menu is showing 수정/삭제; otherwise the password prompt for the action they picked.
+  const [gbMenuId, setGbMenuId] = useState<string | null>(null)
+  const [gbAction, setGbAction] = useState<{ id: string, kind: 'edit' | 'delete' } | null>(null)
+  const [gbActionPassword, setGbActionPassword] = useState('')
+  const [gbEditForm, setGbEditForm] = useState({ name: '', message: '' })
+  const [gbEditId, setGbEditId] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -342,25 +348,82 @@ function App() {
     setGbSubmitting(false)
   }, [gbForm, showToast])
 
-  const confirmGuestbookDelete = useCallback(async () => {
-    const entry = gbEntries.find((candidate) => candidate.id === gbDeleteId)
+  /**
+   * The couple edit and delete without knowing anyone's password. The Firebase auth module is
+   * imported here rather than at the top of the file so it stays in the admin chunk — it is the
+   * same module AdminPanel already loaded to sign in, so by the time this runs it costs nothing.
+   */
+  const adminIdToken = useCallback(async () => {
+    if (!isAdminView) return undefined
+    const { auth } = await import('./firebase')
+    return await auth.currentUser?.getIdToken()
+  }, [isAdminView])
+
+  /** Open 수정 or 삭제 for an entry, asking for the password first unless this is /admin. */
+  const startGuestbookAction = useCallback((entry: GuestbookEntry, kind: 'edit' | 'delete') => {
+    setGbMenuId(null)
+    if (isAdminView) {
+      if (kind === 'edit') {
+        setGbEditForm({ name: entry.name, message: entry.message })
+        setGbEditId(entry.id)
+      } else {
+        setGbAction({ id: entry.id, kind: 'delete' })
+      }
+      return
+    }
+    setGbActionPassword('')
+    setGbAction({ id: entry.id, kind })
+  }, [isAdminView])
+
+  /** Check the password, then either open the edit form or delete outright. */
+  const confirmGuestbookAction = useCallback(async () => {
+    if (!gbAction) return
+    const entry = gbEntries.find((candidate) => candidate.id === gbAction.id)
     if (!entry) return
-    if (!await matchesPassword(entry, gbDeletePassword)) {
+    const authorised = isAdminView || await matchesPassword(entry, gbActionPassword)
+    if (!authorised) {
       showToast('비밀번호가 일치하지 않습니다.')
+      return
+    }
+    if (gbAction.kind === 'edit') {
+      setGbEditForm({ name: entry.name, message: entry.message })
+      setGbEditId(entry.id)
+      setGbAction(null)
       return
     }
     setGbSubmitting(true)
     try {
-      await deleteGuestbookEntry(entry.id)
+      await deleteGuestbookEntry(entry.id, await adminIdToken())
       setGbEntries((current) => current.filter((candidate) => candidate.id !== entry.id))
-      setGbDeleteId(null)
-      setGbDeletePassword('')
+      setGbAction(null)
       showToast('방명록이 삭제되었습니다.')
     } catch {
       showToast('삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.')
     }
     setGbSubmitting(false)
-  }, [gbDeleteId, gbDeletePassword, gbEntries, showToast])
+  }, [gbAction, gbActionPassword, gbEntries, isAdminView, adminIdToken, showToast])
+
+  const saveGuestbookEdit = useCallback(async () => {
+    if (!gbEditId) return
+    const name = gbEditForm.name.trim()
+    const message = gbEditForm.message.trim()
+    if (!name || !message) {
+      showToast('성함과 내용을 입력해 주세요.')
+      return
+    }
+    setGbSubmitting(true)
+    try {
+      await updateGuestbookEntry(gbEditId, { name, message }, await adminIdToken())
+      setGbEntries((current) => current.map((candidate) => (
+        candidate.id === gbEditId ? { ...candidate, name, message } : candidate
+      )))
+      setGbEditId(null)
+      showToast('방명록이 수정되었습니다.')
+    } catch {
+      showToast('수정에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+    }
+    setGbSubmitting(false)
+  }, [gbEditId, gbEditForm, adminIdToken, showToast])
 
   const [rsvpOpen, setRsvpOpen] = useState(false)
   const [rsvpSubmitting, setRsvpSubmitting] = useState(false)
@@ -533,7 +596,8 @@ function App() {
   // background keeps scrolling behind the lightbox and the RSVP sheet. Pinning the body
   // with position:fixed is the technique that actually holds, but it resets scroll
   // position, so we restore it on close.
-  const overlayOpen = lightbox !== null || rsvpOpen || gbWriteOpen || gbDeleteId !== null || !introDone
+  const overlayOpen = lightbox !== null || rsvpOpen || gbWriteOpen
+    || gbAction !== null || gbEditId !== null || !introDone
   useEffect(() => {
     if (!overlayOpen) return
     const scrollY = window.scrollY
@@ -1047,14 +1111,23 @@ function App() {
               <li className="gb-entry" key={entry.id}>
                 <h3 className="gb-author">
                   {entry.name}
-                  <button
-                    type="button"
-                    className="gb-del-btn"
-                    onClick={() => { setGbDeletePassword(''); setGbDeleteId(entry.id) }}
-                    aria-label={`${entry.name}님의 방명록 삭제`}
-                  >
-                    &times;
-                  </button>
+                  <span className="gb-menu-wrap">
+                    <button
+                      type="button"
+                      className="gb-del-btn"
+                      aria-label={`${entry.name}님의 방명록 관리`}
+                      aria-expanded={gbMenuId === entry.id}
+                      onClick={() => setGbMenuId((open) => (open === entry.id ? null : entry.id))}
+                    >
+                      ⋯
+                    </button>
+                    {gbMenuId === entry.id && (
+                      <span className="gb-menu">
+                        <button type="button" onClick={() => startGuestbookAction(entry, 'edit')}>수정</button>
+                        <button type="button" onClick={() => startGuestbookAction(entry, 'delete')}>삭제</button>
+                      </span>
+                    )}
+                  </span>
                 </h3>
                 <p className="gb-message">{entry.message}</p>
                 <span className="gb-date">{formatEntryDate(entry.createdAt)}</span>
@@ -1266,7 +1339,7 @@ function App() {
                     type="password"
                     className="gb-input"
                     maxLength={GUESTBOOK_PASSWORD_MAX}
-                    placeholder={`삭제할 때 필요해요 (최대 ${GUESTBOOK_PASSWORD_MAX}자리)`}
+                    placeholder={`수정·삭제할 때 필요해요 (최대 ${GUESTBOOK_PASSWORD_MAX}자리)`}
                     value={gbForm.password}
                     onChange={(event) => setGbForm((form) => ({ ...form, password: event.target.value }))}
                   />
@@ -1290,27 +1363,66 @@ function App() {
         </div>
       )}
 
-      {/* Guest Book — delete */}
-      {gbDeleteId !== null && (
-        <div className="gb-overlay" onClick={() => setGbDeleteId(null)}>
+      {/* Guest Book — the password gate in front of 수정 and 삭제 */}
+      {gbAction !== null && (
+        <div className="gb-overlay" onClick={() => setGbAction(null)}>
           <div className="gb-modal gb-modal-sm" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="gb-modal-close" onClick={() => setGbDeleteId(null)}>&times;</button>
+            <button type="button" className="gb-modal-close" onClick={() => setGbAction(null)}>&times;</button>
             <div className="gb-modal-body">
               <ul className="gb-form">
                 <li>
-                  <p className="gb-form-label">비밀번호</p>
+                  <p className="gb-form-label">
+                    {gbAction.kind === 'edit' ? '방명록 수정' : '방명록 삭제'}
+                  </p>
+                  {/* /admin never gets here — startGuestbookAction skips straight past the gate. */}
                   <input
                     type="password"
                     className="gb-input"
                     maxLength={GUESTBOOK_PASSWORD_MAX}
                     placeholder="작성할 때 입력한 비밀번호"
-                    value={gbDeletePassword}
-                    onChange={(event) => setGbDeletePassword(event.target.value)}
+                    value={gbActionPassword}
+                    onChange={(event) => setGbActionPassword(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === 'Enter') confirmGuestbookAction() }}
                   />
                 </li>
               </ul>
-              <button type="button" className="gb-submit-btn" disabled={gbSubmitting} onClick={confirmGuestbookDelete}>
-                {gbSubmitting ? '삭제 중...' : '삭제하기'}
+              <button type="button" className="gb-submit-btn" disabled={gbSubmitting} onClick={confirmGuestbookAction}>
+                {gbSubmitting ? '삭제 중...' : gbAction.kind === 'edit' ? '확인' : '삭제하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guest Book — edit */}
+      {gbEditId !== null && (
+        <div className="gb-overlay" onClick={() => setGbEditId(null)}>
+          <div className="gb-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="gb-modal-close" onClick={() => setGbEditId(null)}>&times;</button>
+            <div className="gb-modal-body">
+              <ul className="gb-form">
+                <li>
+                  <p className="gb-form-label">성함</p>
+                  <input
+                    type="text"
+                    className="gb-input"
+                    maxLength={GUESTBOOK_NAME_MAX}
+                    value={gbEditForm.name}
+                    onChange={(event) => setGbEditForm((form) => ({ ...form, name: event.target.value }))}
+                  />
+                </li>
+                <li>
+                  <p className="gb-form-label">내용</p>
+                  <textarea
+                    className="gb-textarea"
+                    maxLength={GUESTBOOK_MESSAGE_MAX}
+                    value={gbEditForm.message}
+                    onChange={(event) => setGbEditForm((form) => ({ ...form, message: event.target.value }))}
+                  />
+                </li>
+              </ul>
+              <button type="button" className="gb-submit-btn" disabled={gbSubmitting} onClick={saveGuestbookEdit}>
+                {gbSubmitting ? '수정 중...' : '수정하기'}
               </button>
             </div>
           </div>
