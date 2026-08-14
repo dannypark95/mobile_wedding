@@ -547,8 +547,31 @@ export default function AdminPanel({
         <label>라벨 <input className="admin-input" value={settings.invitationLabel} onChange={(event) => update({ invitationLabel: event.target.value })} /></label>
         <label>제목 <input className="admin-input" value={settings.invitationHeading} onChange={(event) => update({ invitationHeading: event.target.value })} /></label>
         <label>초대글 본문 <textarea className="admin-input admin-textarea" value={settings.invitationBody} onChange={(event) => update({ invitationBody: event.target.value })} /></label>
-        <label>신랑 소개 <input className="admin-input" value={settings.invitationGroomLine} onChange={(event) => update({ invitationGroomLine: event.target.value })} /></label>
-        <label>신부 소개 <input className="admin-input" value={settings.invitationBrideLine} onChange={(event) => update({ invitationBrideLine: event.target.value })} /></label>
+        <p className="admin-note">신랑 · 신부 소개는 세 칸으로 나뉘어 있고, 두 줄의 같은 칸끼리 세로로 정렬됩니다. 한쪽을 모두 비우면 그 줄은 표시되지 않습니다.</p>
+        <div className="admin-card">
+          <div className="admin-card-head"><strong>신랑</strong></div>
+          <label>혼주 (예: 박영준 · 이영희)
+            <input className="admin-input" value={settings.invitationGroomParents} onChange={(event) => update({ invitationGroomParents: event.target.value })} />
+          </label>
+          <label>관계 (예: 의 아들, 의 장남)
+            <input className="admin-input" value={settings.invitationGroomRelation} onChange={(event) => update({ invitationGroomRelation: event.target.value })} />
+          </label>
+          <label>이름
+            <input className="admin-input" value={settings.invitationGroomName} onChange={(event) => update({ invitationGroomName: event.target.value })} />
+          </label>
+        </div>
+        <div className="admin-card">
+          <div className="admin-card-head"><strong>신부</strong></div>
+          <label>혼주 (예: 김미경 · 배철수)
+            <input className="admin-input" value={settings.invitationBrideParents} onChange={(event) => update({ invitationBrideParents: event.target.value })} />
+          </label>
+          <label>관계 (예: 의 딸, 의 장녀)
+            <input className="admin-input" value={settings.invitationBrideRelation} onChange={(event) => update({ invitationBrideRelation: event.target.value })} />
+          </label>
+          <label>이름
+            <input className="admin-input" value={settings.invitationBrideName} onChange={(event) => update({ invitationBrideName: event.target.value })} />
+          </label>
+        </div>
         <button type="button" className="admin-section-save" onClick={() => saveSection('초대글')}>초대글 변경사항 저장</button>
       </section>}
 

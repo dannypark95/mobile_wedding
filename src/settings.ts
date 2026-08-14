@@ -49,8 +49,16 @@ export type WeddingSettings = {
   invitationLabel: string
   invitationHeading: string
   invitationBody: string
-  invitationGroomLine: string
-  invitationBrideLine: string
+  // One honju line is three columns that align across both rows — the parents, the relation,
+  // and the child — so it is held as three fields rather than one string. A single string can
+  // only ever be centred as a whole, which is what leaves the 아들/딸 sitting at a different
+  // x on each row.
+  invitationGroomParents: string
+  invitationGroomRelation: string
+  invitationGroomName: string
+  invitationBrideParents: string
+  invitationBrideRelation: string
+  invitationBrideName: string
   galleryPhotos: string[]
   galleryLabel: string
   locationLabel: string
@@ -114,8 +122,12 @@ export const defaultSettings: WeddingSettings = {
   // The blank line is load-bearing: Paragraphs splits on it so the verse and the message
   // reveal separately as the guest scrolls.
   invitationBody: '내가 너희를 사랑한 것 같이\n너희도 서로 사랑하라\n(요한복음 13:34)\n\n서로가 마주 보며 다져온 사랑을\n이제 함께 한 곳을 바라보며 걸어갈 수 있는\n큰 사랑으로 키우고자 합니다.\n저희가 이 고백을 평생 지켜나갈 수 있도록\n앞날을 축복해 주세요.',
-  invitationGroomLine: '박 영 준 의 아들  박 성 현',
-  invitationBrideLine: '김 미 경 의 딸  배 예 은',
+  invitationGroomParents: '박 영 준',
+  invitationGroomRelation: '의 아들',
+  invitationGroomName: '박 성 현',
+  invitationBrideParents: '김 미 경',
+  invitationBrideRelation: '의 딸',
+  invitationBrideName: '배 예 은',
   galleryPhotos: albumPhotos,
   galleryLabel: 'GALLERY',
   locationLabel: 'LOCATION',
@@ -224,12 +236,58 @@ const toAccount = (source: Record<string, unknown>): AccountEntry => ({
   number: text(source.number),
 })
 
+/**
+ * Each honju line used to be one string — '박 영 준 의 아들  박 성 현' — and that is still what
+ * the saved document holds until the couple next opens /admin. Split it into the three columns
+ * the section now renders, rather than ignoring it and quietly falling back to the bundled
+ * defaults, which would show whoever this build happened to ship with.
+ */
+const LEGACY_HONJU = /^(.+?)\s*(의\s*(?:아들|딸|장남|차남|장녀|차녀|외아들|외동딸|막내아들|막내딸))\s+(.+)$/
+
+function splitHonjuLine(value: unknown) {
+  if (typeof value !== 'string') return null
+  const match = value.trim().match(LEGACY_HONJU)
+  if (!match) return null
+  return { parents: match[1].trim(), relation: match[2].replace(/\s+/g, ' ').trim(), name: match[3].trim() }
+}
+
+/**
+ * Prefer the three explicit fields; fall back to splitting the legacy line; fall back again to
+ * the bundled defaults. A side the couple has genuinely blanked stays blank — `text()` returns
+ * '' for a present-but-empty field, and only a *missing* field defers to the fallback.
+ */
+function resolveHonju(remote: Record<string, unknown>, side: 'Groom' | 'Bride') {
+  const parents = remote[`invitation${side}Parents`]
+  const relation = remote[`invitation${side}Relation`]
+  const name = remote[`invitation${side}Name`]
+  if ([parents, relation, name].some((field) => typeof field === 'string')) {
+    return {
+      [`invitation${side}Parents`]: text(parents),
+      [`invitation${side}Relation`]: text(relation),
+      [`invitation${side}Name`]: text(name),
+    }
+  }
+  const legacy = splitHonjuLine(remote[`invitation${side}Line`])
+  if (!legacy) return {}
+  return {
+    [`invitation${side}Parents`]: legacy.parents,
+    [`invitation${side}Relation`]: legacy.relation,
+    [`invitation${side}Name`]: legacy.name,
+  }
+}
+
 /** Merge a settings document from Firestore over the bundled defaults, dropping stale photo paths. */
 export function mergeSettings(remote: Partial<WeddingSettings>): WeddingSettings {
   const galleryPhotos = (remote.galleryPhotos ?? []).filter(isPersistablePhoto)
+  const source = remote as Record<string, unknown>
+  const { invitationGroomLine, invitationBrideLine, ...rest } = source
+  void invitationGroomLine
+  void invitationBrideLine
   return {
     ...defaultSettings,
-    ...remote,
+    ...(rest as Partial<WeddingSettings>),
+    ...resolveHonju(source, 'Groom'),
+    ...resolveHonju(source, 'Bride'),
     mainPhoto: resolvePhoto(remote.mainPhoto, defaultSettings.mainPhoto),
     invitationPhoto: resolvePhoto(remote.invitationPhoto, defaultSettings.invitationPhoto),
     endingPhoto: resolvePhoto(remote.endingPhoto, defaultSettings.endingPhoto),

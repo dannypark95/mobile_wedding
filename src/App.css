@@ -1039,6 +1039,91 @@
   }
 }
 
+/* ── Intro ── */
+.intro {
+  position: fixed;
+  inset: 0;
+  /* Above every guest-facing layer — the toast at 99999 is the highest of them. The crop
+     editor outranks this, but it is admin-only and the intro never runs there. */
+  z-index: 100001;
+  display: grid;
+  place-items: center;
+  background: var(--c-white);
+  text-align: center;
+  padding: 24px;
+  transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.intro-leaving {
+  opacity: 0;
+  /* The overlay stays mounted through the fade, so it would otherwise keep swallowing taps
+     on the invitation for the whole 700ms. */
+  pointer-events: none;
+}
+.intro-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* The four delays and this duration set when the last line lands (520 + 750 = ~1.27s), which
+   INTRO_MIN_MS in App.tsx is chosen against so 초대합니다 sits complete for a beat before the
+   curtain lifts rather than still rising into it. Change one, check the other. */
+.intro-date,
+.intro-names,
+.intro-rule,
+.intro-sub {
+  opacity: 0;
+  animation: introRise 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.intro-date {
+  font-family: var(--ff);
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  color: var(--c-main70);
+  margin: 0;
+  animation-delay: 60ms;
+}
+.intro-names {
+  font-family: var(--ff);
+  font-size: 26px;
+  letter-spacing: 0.12em;
+  color: var(--c-black);
+  margin: 16px 0 0;
+  animation-delay: 200ms;
+}
+.intro-rule {
+  width: 34px;
+  height: 1px;
+  background: var(--c-main40);
+  margin: 20px 0;
+  animation-delay: 380ms;
+}
+.intro-sub {
+  font-family: var(--ff);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  color: var(--c-main70);
+  margin: 0;
+  animation-delay: 520ms;
+}
+@keyframes introRise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+/* Same page, no travel — and the hold is cut to ~0.5s in App.tsx to match. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-date,
+  .intro-names,
+  .intro-rule,
+  .intro-sub {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .intro {
+    transition-duration: 200ms;
+  }
+}
+
 /* ── Toast ── */
 .toast {
   position: fixed;
@@ -1310,25 +1395,33 @@
   margin-top: 10px;
   padding-top: 20px;
   font-family: var(--ff);
-  font-size: 14px;
-  color: var(--c-black70);
-  line-height: 2.4;
   letter-spacing: 0.05em;
+  /* An inline-grid sized to its own content, centred by the section's text-align. Both rows
+     live in this one grid rather than one grid each, which is what makes the 의 아들 / 의 딸
+     and the two names share a column edge instead of each row centring independently. */
+  display: inline-grid;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  row-gap: 18px;
+  column-gap: 18px;
+  text-align: left;
 }
-.honju-line {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+.honju-row {
+  display: contents;
 }
-.honju-parent {
+.honju-parents {
+  justify-self: end;
+  font-size: 13px;
   color: var(--c-main70);
-  font-size: 14px;
 }
-.honju-role {
-  font-size: 14px;
+.honju-relation {
+  font-size: 13px;
   color: var(--c-main70);
-  margin-right: 6px;
+}
+.honju-name {
+  font-size: 17px;
+  color: var(--c-black);
+  letter-spacing: 0.12em;
 }
 .honju-child {
   font-size: 15px;

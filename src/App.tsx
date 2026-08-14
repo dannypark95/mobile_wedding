@@ -32,6 +32,46 @@ const initialSettings = cachedSettings ?? defaultSettings
 // network is not staring at an empty frame.
 const HERO_SETTINGS_DEADLINE_MS = 1500
 
+const WEDDING_AT = new Date('2026-10-24T14:30:00+09:00')
+// The intro's date-aware line has to key off the calendar day in Seoul, not the guest's own
+// timezone — an aunt opening this from Los Angeles on the morning of the 24th KST should read
+// 오늘, not 초대합니다.
+const SEOUL_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+const WEDDING_DAY_KEY = SEOUL_DAY.format(WEDDING_AT)
+// The hero already carries the full '2026년 10월 24일 토요일 오후 2시 30분'; the intro wants the
+// short form, and derives it from the same Date so the two can never disagree.
+const INTRO_DATE_TEXT = WEDDING_DAY_KEY.replace(/-/g, '. ').concat('.')
+
+/** 초대합니다 up to the day, 오늘 on it, and past tense once it is over. */
+function introPhrase(now: Date) {
+  const today = SEOUL_DAY.format(now)
+  if (today === WEDDING_DAY_KEY) return '오늘, 결혼합니다'
+  return today < WEDDING_DAY_KEY ? '초대합니다' : '함께해 주셔서 감사합니다'
+}
+
+// The intro holds until the hero photo is settled, so it doubles as the cover over that load
+// rather than being dead time bolted in front of it. heroReady is guaranteed within
+// HERO_SETTINGS_DEADLINE_MS, so this needs no separate escape hatch.
+// The last line lands at ~1.27s (see the stagger in App.css), so this leaves it complete and
+// still for roughly the same again before the fade starts.
+const INTRO_MIN_MS = 2100
+const INTRO_MIN_REDUCED_MS = 500
+// Keep in step with the .intro transition in App.css: this unmounts the overlay, and if it
+// fires early the intro pops rather than fades.
+const INTRO_FADE_MS = 700
+
+const prefersReducedMotion = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
+// Read at import time so the hold is measured from when the page started, not from when React
+// finished mounting — on a slow phone those are far enough apart to matter.
+const INTRO_STARTED_AT = Date.now()
+
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }
@@ -95,6 +135,23 @@ function Multiline({ text }: { text: string }) {
   )
 }
 
+/**
+ * One honju line, as three cells rather than a sentence: the parents, then 의 아들 / 의 딸, then
+ * the child. The grid in App.css shares its column widths across both rows, so the relation and
+ * the names line up vertically however long either set of parents' names happens to be.
+ */
+function HonjuRow({ parents, relation, name }: { parents: string; relation: string; name: string }) {
+  // A side the couple blanked entirely should take no space rather than leave an empty row.
+  if (!parents && !relation && !name) return null
+  return (
+    <div className="honju-row">
+      <span className="honju-parents">{parents}</span>
+      <span className="honju-relation">{relation}</span>
+      <span className="honju-name">{name}</span>
+    </div>
+  )
+}
+
 function AccountRow({
   account,
   onCopy,
@@ -130,6 +187,9 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const isAdminView = window.location.pathname.replace(/\/$/, '').endsWith('/admin')
+  // The editor needs the invitation itself, not a curtain over it, so /admin never sees this.
+  const [introDone, setIntroDone] = useState(isAdminView)
+  const [introLeaving, setIntroLeaving] = useState(false)
   const [groomOpen, setGroomOpen] = useState(false)
   const [brideOpen, setBrideOpen] = useState(false)
   // Keyed by index and independent, matching how the two 계좌번호 accordions already behave —
@@ -178,6 +238,23 @@ function App() {
       controller.abort()
     }
   }, [])
+
+  // Start the exit once the hero is settled, but never before the minimum hold — otherwise a
+  // warm cache dismisses the intro almost the instant it appears, which reads as a flicker
+  // rather than a greeting.
+  useEffect(() => {
+    if (introDone || introLeaving || !heroReady) return
+    const hold = prefersReducedMotion() ? INTRO_MIN_REDUCED_MS : INTRO_MIN_MS
+    const elapsed = Date.now() - INTRO_STARTED_AT
+    const timer = setTimeout(() => setIntroLeaving(true), Math.max(0, hold - elapsed))
+    return () => clearTimeout(timer)
+  }, [heroReady, introDone, introLeaving])
+
+  useEffect(() => {
+    if (!introLeaving || introDone) return
+    const timer = setTimeout(() => setIntroDone(true), INTRO_FADE_MS)
+    return () => clearTimeout(timer)
+  }, [introLeaving, introDone])
 
   const audioRef = useRef<HTMLAudioElement>(null)
   // Driven by the element's own play/pause events. Mobile blocks autoplay, so starting
@@ -307,7 +384,7 @@ function App() {
   }, [settings.mainNames, settings.mainDateText, settings.mainLocationText, copyShareLink])
 
   useEffect(() => {
-    const target = new Date('2026-10-24T14:30:00+09:00').getTime()
+    const target = WEDDING_AT.getTime()
     const tick = () => {
       const diff = Math.max(target - Date.now(), 0)
       setCd({
@@ -326,6 +403,10 @@ function App() {
   // invitation paragraph, another 안내 block) was never picked up by a one-shot observer, and
   // an unobserved .fade-up is stuck at opacity 0 — invisible for the rest of the visit.
   useEffect(() => {
+    // Nothing reveals while the intro is up. Without this the blocks already in the viewport
+    // would observe, play their 750ms rise behind the overlay, and be sitting there finished
+    // by the time it lifts — so the guest never sees the page arrive, only its aftermath.
+    if (!introDone) return
     const els = document.querySelectorAll<HTMLElement>('.fade-up:not(.is-visible)')
     if (!els.length) return
     const obs = new IntersectionObserver(
@@ -348,13 +429,13 @@ function App() {
     )
     els.forEach((el) => obs.observe(el))
     return () => obs.disconnect()
-  }, [settings])
+  }, [settings, introDone])
 
   // `overflow: hidden` on body is a no-op on iOS Safari once the page is scrolled — the
   // background keeps scrolling behind the lightbox and the RSVP sheet. Pinning the body
   // with position:fixed is the technique that actually holds, but it resets scroll
   // position, so we restore it on close.
-  const overlayOpen = lightbox !== null || rsvpOpen
+  const overlayOpen = lightbox !== null || rsvpOpen || !introDone
   useEffect(() => {
     if (!overlayOpen) return
     const scrollY = window.scrollY
@@ -567,6 +648,20 @@ function App() {
             <div className="section-heading">{settings.invitationHeading}</div>
           </div>
           <Paragraphs text={settings.invitationBody} className="section-body" />
+          {/* Directly under the greeting, before the photo: the honju lines close the passage
+              the body opens, and a photo between the two read as a break mid-sentence. */}
+          <div className="invite-names fade-up">
+            <HonjuRow
+              parents={settings.invitationGroomParents}
+              relation={settings.invitationGroomRelation}
+              name={settings.invitationGroomName}
+            />
+            <HonjuRow
+              parents={settings.invitationBrideParents}
+              relation={settings.invitationBrideRelation}
+              name={settings.invitationBrideName}
+            />
+          </div>
           <div className="invite-photo fade-up">
             <img
               src={settings.invitationPhoto}
@@ -575,10 +670,6 @@ function App() {
               decoding="async"
               style={cropStyle(settings.invitationCropZoom, settings.invitationCropX, settings.invitationCropY)}
             />
-          </div>
-          <div className="invite-names fade-up">
-            <div className="honju-line">{settings.invitationGroomLine}</div>
-            <div className="honju-line">{settings.invitationBrideLine}</div>
           </div>
         </section>
 
@@ -1035,6 +1126,20 @@ function App() {
                 <img src={src} alt={`썸네일 ${i + 1}`} loading="lazy" decoding="async" />
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Intro — the curtain over the settings fetch and the hero decode.
+          aria-hidden because every word of it appears again in the hero directly underneath;
+          announcing it would just read the couple's names twice. */}
+      {!introDone && (
+        <div className={`intro ${introLeaving ? 'intro-leaving' : ''}`} aria-hidden="true">
+          <div className="intro-inner">
+            <p className="intro-date">{INTRO_DATE_TEXT}</p>
+            <p className="intro-names">{settings.mainNames}</p>
+            <span className="intro-rule" />
+            <p className="intro-sub">{introPhrase(new Date())}</p>
           </div>
         </div>
       )}
