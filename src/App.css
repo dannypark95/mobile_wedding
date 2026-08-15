@@ -1036,6 +1036,9 @@
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
+  /* It appeared on a frame with nothing to soften it, which reads as a glitch next to every
+     other panel on the page. Same keyframe, shorter — a menu should feel instant. */
+  animation: panelReveal 0.14s ease;
 }
 .gb-menu button {
   border: none;
@@ -1127,20 +1130,6 @@
   to { opacity: 1; transform: none; }
 }
 /* Same page, no travel — and the hold is cut to ~0.5s in App.tsx to match. */
-@media (prefers-reduced-motion: reduce) {
-  .intro-date,
-  .intro-names,
-  .intro-rule,
-  .intro-sub {
-    opacity: 1;
-    transform: none;
-    animation: none;
-  }
-  .intro {
-    transition-duration: 200ms;
-  }
-}
-
 /* ── Toast ── */
 .toast {
   position: fixed;
@@ -1246,18 +1235,13 @@
 /* An audience that skews elderly is likelier to have this on, and a page that slides every
    block into place can be genuinely unpleasant with it. Content still appears — it just
    appears, rather than travelling. */
-@media (prefers-reduced-motion: reduce) {
-  .fade-up {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-  .info-panel {
-    animation: none;
-  }
-  html {
-    scroll-behavior: auto;
-  }
+@keyframes toastFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes toastFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 /* ── Hero / Save the Date ── */
@@ -1708,11 +1692,12 @@ main.invitation > section.section-wrap:nth-of-type(even) {
 .info-panel {
   border-top: 1px dotted var(--c-main40);
   padding: 15px 18px 17px;
-  /* Deliberately not the acctSlide keyframe the 계좌번호 boxes use: that one animates
-     max-height to a fixed 400px and holds it, which would clip the 김해공항 block. */
-  animation: infoSlide 0.25s ease forwards;
+  animation: panelReveal 0.25s ease forwards;
 }
-@keyframes infoSlide {
+/* Shared by both accordions — 오시는 길 안내 and the two 계좌번호 boxes. Neither animates a
+   height: a panel opens by revealing at its natural size, so nothing can be clipped and
+   nothing reflows mid-animation. */
+@keyframes panelReveal {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
@@ -1818,11 +1803,11 @@ main.invitation > section.section-wrap:nth-of-type(even) {
 .acct-panel {
   border-top: 1px dotted var(--c-main40);
   padding: 0;
-  animation: acctSlide 0.3s ease forwards;
-}
-@keyframes acctSlide {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 400px; }
+  /* Was its own keyframe animating max-height 0 -> 400px. That reflows the page on every frame
+     of the open — the one animation here that could not be composited — and then *held* the
+     panel at 400px, so a family adding a fifth account would have had it clipped with no way
+     to see the rest. Opacity and transform cost nothing to animate and impose no ceiling. */
+  animation: panelReveal 0.3s ease forwards;
 }
 .acct-row {
   padding: 18px 20px;
@@ -2216,7 +2201,9 @@ main.invitation > section.section-wrap:nth-of-type(even) {
   font-size: 13px;
   color: var(--c-main70);
   cursor: pointer;
-  transition: all 0.2s;
+  /* Named, not `all`: `all` also transitions anything layout-affecting that happens to change,
+     so a property added here later would silently start animating a reflow. */
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   text-align: center;
 }
 .rsvp-opt.rsvp-opt-on {
@@ -2430,5 +2417,67 @@ main.invitation > section.section-wrap:nth-of-type(even) {
 
   .lightbox-overlay {
     padding: max(16px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Reduced motion ──
+   Last in the file on purpose. These override rules carry no more specificity than the
+   ones they are silencing (.acct-panel, .hero .fade-up), so whichever is declared later
+   wins — and while this block sat mid-stylesheet the overrides simply lost. The
+   .info-panel rule here had never once taken effect. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-date,
+  .intro-names,
+  .intro-rule,
+  .intro-sub {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  .intro {
+    transition-duration: 200ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The hero selectors are repeated verbatim because specificity outranks order: `.hero
+     .fade-up` is two classes and would keep its 1.5s and its 16px offset however late a
+     one-class rule is declared. Without the :not() line the hero blocks sit 16px low and then
+     jump into place — motion, under the setting that asks for none. */
+  .fade-up,
+  .hero .fade-up,
+  .hero .fade-up:not(.is-visible) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  /* Panels and modals appear at their end state instead of travelling to it. */
+  .info-panel,
+  .acct-panel,
+  .gb-modal,
+  .gb-menu {
+    animation: none;
+  }
+  /* The one animation on the page that never stops: a button pulsing in the corner for as long
+     as the music plays is precisely what this setting is asking to be spared. */
+  .music-btn.music-playing {
+    animation: none;
+  }
+  /* The chevrons keep their rotation — it is what says open or closed — they just arrive at it
+     rather than swinging to it. */
+  .acct-arrow,
+  .gb-more svg,
+  .footer-heart,
+  .lb-thumb,
+  .rsvp-opt,
+  .music-btn {
+    transition: none;
+  }
+  /* The toast still needs to fade, or it would vanish on a frame — but it can do that without
+     sliding up from below. Timings match the default so TOAST_MS still lands. */
+  .toast {
+    animation: toastFadeIn 0.3s ease, toastFadeOut 0.3s ease 1.4s forwards;
+  }
+  html {
+    scroll-behavior: auto;
   }
 }
