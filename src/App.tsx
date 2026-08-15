@@ -810,7 +810,7 @@ function App() {
         </section>
 
         {/* Invitation */}
-        <section className="section-wrap">
+        <section className="section-wrap invitation-section">
           <div className="fade-up">
             <div className="section-label">{settings.invitationLabel}</div>
             <div className="section-heading">{settings.invitationHeading}</div>
@@ -986,7 +986,7 @@ function App() {
 
         {/* Information */}
         {(settings.infoHeading || settings.infoBlocks.length > 0) && (
-          <section className="section-wrap alt-bg">
+          <section className="section-wrap">
             <div className="fade-up">
               <div className="section-label">{settings.infoLabel}</div>
               <div className="section-heading">{settings.infoHeading}</div>
@@ -1033,7 +1033,7 @@ function App() {
         )}
 
         {/* Thanks To */}
-        <section className="section-wrap tint-bg">
+        <section className="section-wrap">
           <div className="fade-up">
             <div className="section-label">{settings.thanksLabel}</div>
             <div className="section-heading">{settings.thanksHeading}</div>
@@ -1080,7 +1080,7 @@ function App() {
         </section>
 
         {/* RSVP */}
-        <section className="section-wrap alt-bg">
+        <section className="section-wrap">
           <div className="fade-up">
             <div className="section-label">R/S/V/P</div>
             <div className="section-heading">참석 여부</div>
@@ -1161,7 +1161,7 @@ function App() {
         </section>
 
         {/* Share */}
-        <section className="section-wrap tint-bg">
+        <section className="section-wrap">
           <div className="fade-up">
             <div className="section-label">SHARE</div>
             <div className="section-heading">청첩장 공유하기</div>
@@ -1174,26 +1174,6 @@ function App() {
             <button type="button" className="share-btn share-copy" onClick={copyShareLink}>
               링크 복사하기
             </button>
-          </div>
-        </section>
-
-        {/* Ending Photo */}
-        <section className="ending-photo">
-          <img
-            src={settings.endingPhoto}
-            alt="성현과 예은"
-            loading="lazy"
-            decoding="async"
-            style={cropStyle(settings.endingCropZoom, settings.endingCropX, settings.endingCropY)}
-          />
-          <div className="ending-overlay" style={{ background: `rgba(0, 0, 0, ${settings.endingOverlayOpacity / 100})` }} />
-          <div className="ending-text fade-up" style={{ top: `${settings.endingTextTop}%` }}>
-            <p
-              className={`ending-font-${settings.endingTextFont}`}
-              style={{ fontSize: settings.endingTextSize }}
-            >
-              {settings.endingText}
-            </p>
           </div>
         </section>
 

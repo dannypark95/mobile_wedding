@@ -1,6 +1,5 @@
 import mainPhoto from '../img/main/IMG_0368.jpg'
 import invitationPhoto from '../img/main/invitation.jpg'
-import endingPhoto from '../img/main/send_off.JPG'
 
 import p01 from '../img/gallery/IMG_0079.jpg'
 import p02 from '../img/gallery/IMG_0515.jpg'
@@ -83,24 +82,15 @@ export type WeddingSettings = {
   groomAccounts: AccountEntry[]
   brideAccountLabel: string
   brideAccounts: AccountEntry[]
-  endingPhoto: string
-  endingCropZoom: number
-  endingCropX: number
-  endingCropY: number
-  endingOverlayOpacity: number
-  endingText: string
-  endingTextSize: number
-  endingTextTop: number
-  endingTextFont: string
 }
 
 export type NumericSettingKey = {
   [K in keyof WeddingSettings]: WeddingSettings[K] extends number ? K : never
 }[keyof WeddingSettings]
 
-export type PhotoSettingKey = 'mainPhoto' | 'invitationPhoto' | 'endingPhoto'
+export type PhotoSettingKey = 'mainPhoto' | 'invitationPhoto'
 
-export const PHOTO_KEYS: PhotoSettingKey[] = ['mainPhoto', 'invitationPhoto', 'endingPhoto']
+export const PHOTO_KEYS: PhotoSettingKey[] = ['mainPhoto', 'invitationPhoto']
 
 export const defaultSettings: WeddingSettings = {
   mainPhoto,
@@ -179,15 +169,6 @@ export const defaultSettings: WeddingSettings = {
     { role: '신부', name: '배예은', bank: '토스뱅크', number: '0000-00-0000000' },
     { role: '혼주', name: '김미경', bank: '은행명', number: '0000-00-0000000' },
   ],
-  endingPhoto,
-  endingCropZoom: 100,
-  endingCropX: 50,
-  endingCropY: 50,
-  endingOverlayOpacity: 35,
-  endingText: '감사합니다.',
-  endingTextSize: 16,
-  endingTextTop: 50,
-  endingTextFont: 'serif',
 }
 
 // A photo is only safe to persist if it lives somewhere independent of this build. Bundled
@@ -290,7 +271,6 @@ export function mergeSettings(remote: Partial<WeddingSettings>): WeddingSettings
     ...resolveHonju(source, 'Bride'),
     mainPhoto: resolvePhoto(remote.mainPhoto, defaultSettings.mainPhoto),
     invitationPhoto: resolvePhoto(remote.invitationPhoto, defaultSettings.invitationPhoto),
-    endingPhoto: resolvePhoto(remote.endingPhoto, defaultSettings.endingPhoto),
     galleryPhotos: galleryPhotos.length ? galleryPhotos : defaultSettings.galleryPhotos,
     infoBlocks: resolveRows(remote.infoBlocks, defaultSettings.infoBlocks, toInfoBlock),
     groomAccounts: resolveRows(remote.groomAccounts, defaultSettings.groomAccounts, toAccount),

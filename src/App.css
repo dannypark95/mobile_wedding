@@ -872,28 +872,6 @@
   border-radius: 7px;
 }
 
-.admin-mini-ending {
-  background: #111;
-}
-
-.admin-mini-ending-overlay {
-  position: absolute;
-  inset: 0;
-}
-
-.admin-mini-ending p {
-  position: absolute;
-  left: 0;
-  right: 0;
-  transform: translateY(-50%);
-  margin: 0;
-  padding: 0 14px;
-  color: #fff;
-  text-align: center;
-  line-height: 1.6;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
-}
-
 .admin-preview-shell {
   width: 100%;
   max-width: 480px;
@@ -1384,17 +1362,21 @@
 .section-wrap {
   padding: 60px 30px 70px;
   text-align: center;
-  background: var(--c-main03);
-}
-.section-wrap:nth-child(even) {
   background: var(--c-white);
 }
-.section-wrap.alt-bg {
-  background: var(--c-white);
-}
-/* The Information section above 마음 전하실 곳 is conditional, so nth-child parity is not a
-   background the tail of the page can rely on. Every section from there down states its own. */
-.section-wrap.tint-bg {
+/* Sections alternate white / faint warm grey so each one reads as its own block.
+ *
+ * nth-of-TYPE, counting sections, rather than nth-child counting every element: the music
+ * button is also a child of <main>, and it was throwing the parity off by one, which is how
+ * WEDDING DATE, GALLERY, LOCATION and INFORMATION all ended up white in a row with no visible
+ * seam between them. Three overlapping systems were papering over that — this nth-child rule,
+ * hand-applied .alt-bg / .tint-bg classes, and a !important on the guestbook — and they
+ * disagreed, so adding or removing any section reshuffled the page.
+ *
+ * Positional is the right mechanism here as long as it counts the right things: the
+ * INFORMATION block is conditional, and when it is absent every section below shifts one and
+ * simply keeps alternating. The hero is section 1, so content starts on the tinted even beat. */
+main.invitation > section.section-wrap:nth-of-type(even) {
   background: var(--c-main03);
 }
 .section-wrap.gallery-section {
@@ -1432,6 +1414,15 @@
   margin: 30px -30px;
   aspect-ratio: 3 / 4;
   overflow: hidden;
+}
+/* The photo is the last thing in this section now that the honju lines sit above it, so its
+   own 30px margin and the section's 70px padding stacked into ~100px of empty tone under it.
+   Let it run to the section edge; the next section's top padding is the whole gap. */
+.invitation-section {
+  padding-bottom: 0;
+}
+.invitation-section .invite-photo {
+  margin-bottom: 0;
 }
 .invite-photo img {
   width: 100%;
@@ -1949,9 +1940,6 @@
 }
 
 /* ── Guest Book ── */
-.gb-section {
-  background: #f4f4f2 !important;
-}
 .gb-list {
   list-style: none;
   margin: 20px 0 0;
@@ -2264,57 +2252,6 @@
 .rsvp-nav-btns .gb-submit-btn {
   flex: 1;
   margin-top: 0;
-}
-
-/* ── Ending Photo ── */
-.ending-photo {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-}
-.ending-photo img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  filter: brightness(0.55);
-  transition: transform 0.18s ease, object-position 0.18s ease;
-}
-.ending-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.127);
-  pointer-events: none;
-}
-.ending-text {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  transform: translateY(-50%);
-  text-align: center;
-  padding: 0 30px;
-}
-.ending-text p {
-  font-family: var(--ff);
-  font-size: 16px;
-  color: #fff;
-  line-height: 2.2;
-  margin: 0;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
-}
-.ending-font-serif {
-  font-family: var(--ff);
-}
-.ending-font-sans {
-  font-family: var(--ff-body);
-}
-.ending-font-script {
-  /* Brush Script MT / Segoe Script are desktop-Windows faces with no Hangul coverage — on a
-     phone the 손글씨 option silently rendered as the default serif. Nanum Pen Script is a
-     Korean handwriting face; its webfont only downloads if this class is actually used. */
-  font-family: 'Nanum Pen Script', cursive;
 }
 
 /* ── Footer ── */

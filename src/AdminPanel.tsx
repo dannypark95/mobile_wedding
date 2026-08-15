@@ -28,7 +28,7 @@ type CropEditorState = {
   yKey: NumericSettingKey
 }
 
-type AdminSectionKey = 'main' | 'invitation' | 'gallery' | 'location' | 'thanks' | 'ending'
+type AdminSectionKey = 'main' | 'invitation' | 'gallery' | 'location' | 'thanks'
 
 const SECTION_TABS: { key: AdminSectionKey, label: string }[] = [
   { key: 'main', label: '메인' },
@@ -36,7 +36,6 @@ const SECTION_TABS: { key: AdminSectionKey, label: string }[] = [
   { key: 'gallery', label: '갤러리' },
   { key: 'location', label: '오시는 길' },
   { key: 'thanks', label: '계좌번호' },
-  { key: 'ending', label: '마지막' },
 ]
 
 const EMPTY_ACCOUNT: AccountEntry = { role: '', name: '', bank: '', number: '' }
@@ -293,10 +292,10 @@ export default function AdminPanel({
     setSettings((current) => ({ ...current, ...patch }))
   }, [setSettings])
 
-  const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto' | 'endingPhoto') => {
+  const uploadSingle = useCallback(async (event: ChangeEvent<HTMLInputElement>, key: 'mainPhoto' | 'invitationPhoto') => {
     const file = event.target.files?.[0]
     if (!file) return
-    const label = key === 'mainPhoto' ? '메인 사진' : key === 'invitationPhoto' ? '초대글 사진' : '마지막 사진'
+    const label = key === 'mainPhoto' ? '메인 사진' : '초대글 사진'
     try {
       const url = await uploadImageFile(file, key)
       update({ [key]: url })
@@ -812,55 +811,7 @@ export default function AdminPanel({
         <button type="button" className="admin-section-save" onClick={() => saveSection('계좌번호')}>계좌번호 변경사항 저장</button>
       </section>}
 
-      {activeSection === 'ending' && <section className="admin-section">
-        <h3>마지막 사진</h3>
-        <div className="admin-mini-preview admin-mini-ending admin-mobile-crop">
-          <img
-            src={settings.endingPhoto}
-            alt="마지막 사진 미리보기"
-            style={cropStyle(settings.endingCropZoom, settings.endingCropX, settings.endingCropY)}
-          />
-          <div className="admin-mini-ending-overlay" style={{ background: `rgba(0, 0, 0, ${settings.endingOverlayOpacity / 100})` }} />
-          <p
-            className={`ending-font-${settings.endingTextFont}`}
-            style={{
-              top: `${settings.endingTextTop}%`,
-              fontSize: Math.max(10, settings.endingTextSize * 0.72),
-            }}
-          >
-            {settings.endingText}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="admin-crop-launch"
-          onClick={() => setCropEditor({
-            title: '마지막 사진',
-            photo: settings.endingPhoto,
-            zoomKey: 'endingCropZoom',
-            xKey: 'endingCropX',
-            yKey: 'endingCropY',
-          })}
-        >
-          크롭 조정
-        </button>
-        <label className="admin-file">
-          <input type="file" accept={IMAGE_ACCEPT} onChange={(event) => uploadSingle(event, 'endingPhoto')} />
-          마지막 사진 변경
-        </label>
-        <label>텍스트 배경 어둡게 <input type="range" min="0" max="80" value={settings.endingOverlayOpacity} onChange={(event) => update({ endingOverlayOpacity: Number(event.target.value) })} /></label>
-        <label>문구 <input className="admin-input" value={settings.endingText} onChange={(event) => update({ endingText: event.target.value })} /></label>
-        <label>문구 크기 <input type="range" min="12" max="36" value={settings.endingTextSize} onChange={(event) => update({ endingTextSize: Number(event.target.value) })} /></label>
-        <label>문구 위치 <input type="range" min="10" max="90" value={settings.endingTextTop} onChange={(event) => update({ endingTextTop: Number(event.target.value) })} /></label>
-        <label>글꼴
-          <select className="admin-input" value={settings.endingTextFont} onChange={(event) => update({ endingTextFont: event.target.value })}>
-            <option value="serif">명조</option>
-            <option value="sans">고딕</option>
-            <option value="script">손글씨</option>
-          </select>
-        </label>
-        <button type="button" className="admin-section-save" onClick={() => saveSection('마지막 사진')}>마지막 사진 변경사항 저장</button>
-      </section>}
+
       </aside>
     </>
   )
