@@ -1205,10 +1205,12 @@
 /* ── Fade animation ── */
 .fade-up {
   opacity: 0;
-  transform: translateY(26px);
-  /* Expo-out rather than plain ease: it covers most of the distance early and settles, which
-     reads as motion easing to a stop instead of gliding at a constant rate. */
-  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateY(30px);
+  /* Quint-out rather than the expo-out this used to use. Both ease to a stop, but expo covers
+     almost all its distance in the first quarter of the duration — fine over 0.75s, and at
+     1.15s it arrives early and then visibly crawls the last few pixels. Quint spreads the
+     movement across the whole run, which is what reads as slow rather than merely long. */
+  transition: opacity 1.15s cubic-bezier(0.22, 1, 0.36, 1), transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
   /* No will-change here on purpose: it promoted all 24 not-yet-revealed blocks to their own
      compositor layer at load, which is real memory on the older phones this audience carries.
      opacity and transform are composited anyway, so the hint bought nothing. */
@@ -1218,11 +1220,10 @@
   transform: translateY(0);
 }
 /* The hero is the one block that arrives the moment the intro lifts, and it is a whole screen
-   of photograph rather than a line of text — at the shared 0.75s it snapped into place just as
-   the curtain got out of the way. Twice the time, and a shorter distance to travel, so it
-   settles rather than jumps. */
+   of photograph rather than a line of text — it wants longer than the rest, and a shorter
+   distance to travel, so it settles into place instead of jumping. */
 .hero .fade-up {
-  transition-duration: 1.5s;
+  transition-duration: 1.8s;
 }
 .hero .fade-up:not(.is-visible) {
   transform: translateY(16px);

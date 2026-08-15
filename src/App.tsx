@@ -568,7 +568,7 @@ function App() {
   // an unobserved .fade-up is stuck at opacity 0 — invisible for the rest of the visit.
   useEffect(() => {
     // Nothing reveals while the intro is up. Without this the blocks already in the viewport
-    // would observe, play their 750ms rise behind the overlay, and be sitting there finished
+    // would observe, play their rise behind the overlay, and be sitting there finished
     // by the time it lifts — so the guest never sees the page arrive, only its aftermath.
     if (!introDone) return
     const els = document.querySelectorAll<HTMLElement>('.fade-up:not(.is-visible)')
@@ -582,14 +582,22 @@ function App() {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return
           const el = entry.target as HTMLElement
-          el.style.transitionDelay = `${Math.min(step, 4) * 80}ms`
+          el.style.transitionDelay = `${Math.min(step, 5) * 120}ms`
           el.classList.add('is-visible')
           step += 1
           // Revealing is one-way, so stop watching rather than paying for every later scroll.
           obs.unobserve(el)
         })
       },
-      { threshold: 0.1 },
+      {
+        threshold: 0.15,
+        // Hold the trigger back from the very bottom edge. At threshold alone, a short block
+        // like the 초대합니다 heading fires when a few pixels of it clear the fold, so it has
+        // finished arriving before the guest has scrolled far enough to read it — the motion
+        // happens offscreen and they just find it sitting there. Reveals now start once the
+        // block is properly on screen, which is where it is worth watching.
+        rootMargin: '0px 0px -12% 0px',
+      },
     )
     els.forEach((el) => obs.observe(el))
     return () => obs.disconnect()
