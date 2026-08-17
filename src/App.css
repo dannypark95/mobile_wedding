@@ -2421,6 +2421,105 @@ main.invitation > section.section-wrap:nth-of-type(even) {
   }
 }
 
+/* ── /video ──
+   Yeeun's page for handing over footage. It borrows the admin panel's chrome so it is
+   obviously part of the same private tooling, but it is a whole page rather than a sidebar. */
+.video-page {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 20px 16px 48px;
+  box-sizing: border-box;
+}
+.video-panel {
+  position: static;
+  width: 100%;
+  max-width: 760px;
+  max-height: none;
+  margin: 0 auto;
+}
+/* The signed-out state is a three-field form, not a gallery — full width makes it look like
+   something went wrong. */
+.video-panel.admin-login {
+  max-width: 420px;
+  margin-top: 6vh;
+}
+.video-file {
+  margin-top: 14px;
+  padding: 18px 12px;
+  font-size: 14px;
+}
+.video-status {
+  margin: 12px 0 0;
+  color: #e4e4e7;
+}
+.video-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0 12px;
+  padding-top: 14px;
+  border-top: 1px solid #27272a;
+  color: #a1a1aa;
+  font-family: var(--ff-body);
+  font-size: 12px;
+}
+.video-grid {
+  display: grid;
+  /* auto-fill so one photo does not stretch to the full width of the panel, and so the grid
+     goes from two across on a phone to four on a laptop without a media query. */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.video-item {
+  position: relative;
+  margin: 0;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background: #18181b;
+  overflow: hidden;
+}
+.video-item img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+.video-item figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 9px 9px;
+  font-family: var(--ff-body);
+  font-size: 11px;
+  color: #a1a1aa;
+}
+.video-item figcaption strong {
+  color: #fafafa;
+  font-weight: 600;
+  /* Filenames off a camera are long and must not push the tile wider than its track. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.video-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.video-remove:active {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 /* ── Reduced motion ──
    Last in the file on purpose. These override rules carry no more specificity than the
    ones they are silencing (.acct-panel, .hero .fade-up), so whichever is declared later

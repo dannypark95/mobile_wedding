@@ -5,10 +5,32 @@ rules_version = '2';
 // only the admin account writes.
 service firebase.storage {
   match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'admin@mobile-wedding.local';
+    }
+
     match /wedding/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null
-        && request.auth.token.email == 'admin@mobile-wedding.local';
+      allow write: if isAdmin();
+    }
+
+    // Source photos for the wedding video, uploaded at /video. Private on both counts: these
+    // are unpublished working files the couple has not chosen to show anyone, and the bucket
+    // name ships in the JS bundle, so a world-readable folder here would be trivially
+    // enumerable by anyone who looked.
+    //
+    // It sits outside wedding/ deliberately rather than under it. Storage rules OR together —
+    // every matching rule is evaluated and access is granted if any one allows it — so a
+    // stricter rule nested inside wedding/ would have been overruled by the public read above,
+    // and the only way to restrict it there would have been to narrow that rule and risk the
+    // live invitation. A separate top-level path cannot touch it.
+    //
+    // Download URLs still work for anyone holding one: getDownloadURL mints a token that grants
+    // access to that single object regardless of these rules. That is what lets the grid render
+    // and the copied links be opened without signing in.
+    match /video-source/{allPaths=**} {
+      allow read, write: if isAdmin();
     }
   }
 }
